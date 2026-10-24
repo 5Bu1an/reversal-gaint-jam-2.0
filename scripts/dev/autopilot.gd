@@ -197,6 +197,13 @@ func _make_plan(plan_name: String) -> Array:
 			plan = [[1, "god", ""], [1, "warp_xy", Vector2(170, 316)], [200, "quit", ""]]
 			for f in range(2, 200, 8):
 				plan.append([f, "grunt_trace", ""])
+		"zoomtest":
+			# --zoom=N previews a closer camera at a few spots.
+			plan = [[1, "god", ""], [2, "zoom", ""]]
+			var spots := [Vector2(480, 316), Vector2(1100, 316), Vector2(1600, 316), Vector2(2220, 120), Vector2(2800, 316)]
+			for i in spots.size():
+				plan += [[5 + i * 60, "warp_xy", spots[i]], [50 + i * 60, "shot", "zoom_%d" % i]]
+			plan.append([5 + spots.size() * 60, "quit", ""])
 		"win":
 			plan = [[1, "god", ""], [250, "warp", 2680], [255, "press", "move_right"], [260, "kill_boss", ""],
 				[300, "shot", "1_portal_open"], [600, "shot", "2_won"], [620, "quit", ""]]
@@ -371,6 +378,12 @@ func _physics_process(_delta: float) -> void:
 				var p: Player = get_tree().get_first_node_in_group("player")
 				print("[rs] frame=%d pos=(%d,%d) hp=%d respawn_t=%.2f safe=%s invuln=%.2f scale=%.2f" % [
 					_frame, p.position.x, p.position.y, p.hp, p.respawn_t, p.safe_pos, p.invuln_t, Engine.time_scale])
+			"zoom":
+				var z := 1.0
+				for arg in OS.get_cmdline_user_args():
+					if arg.begins_with("--zoom="):
+						z = float(arg.get_slice("=", 1))
+				get_viewport().get_camera_2d().zoom = Vector2(z, z)
 			"grunt_trace":
 				for e: Enemy in get_tree().get_nodes_in_group("enemies"):
 					if e.get_script() == Enemy and not e.inverted:

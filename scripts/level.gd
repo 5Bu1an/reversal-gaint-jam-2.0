@@ -52,13 +52,15 @@ const SHARDS: Array[Vector2] = [
 
 ## Inscriptions: position, then lines. They only show when you stand close.
 const HINTS := [
-	[Vector2(110, 200), ["Hold L to turn time back.", "What you undo keeps moving, as a ghost."]],
-	[Vector2(390, 200), ["Hold J, then let go.", "An echo of the cut strikes again, as a ghost would."]],
-	[Vector2(520, 200), ["Some here move backwards through time.", "Your blade glances off them. Your ghost's does not."]],
-	[Vector2(660, 200), ["Thorns hang low ahead.", "A light tap of jump keeps you under them."]],
+	[Vector2(110, 236), ["Hold L to turn time back.", "What you undo keeps moving, as a ghost."]],
+	[Vector2(390, 236), ["Hold J, then let go: an echo of the cut strikes again, as a ghost would.",
+		"Charged, dash to lunge. Charged, hold up or down to spin."]],
+	[Vector2(520, 236), ["Some here move backwards through time.", "Your blade glances off them. Your ghost's does not."]],
+	[Vector2(660, 230), ["Thorns hang low ahead.", "A light tap of jump keeps you under them."]],
 	[Vector2(990, 160), ["Strike downward in the air", "to spring off what lies below."]],
-	[Vector2(2110, 200), ["Cling to a wall by holding toward it.", "Something waits at the top of the shaft."]],
-	[Vector2(2480, 200), ["Beyond, the Shogun.", "It bends time as you do."]],
+	[Vector2(1210, 236), ["Strike just as a blow lands, and you turn it back.", "Even the Shogun's quakes."]],
+	[Vector2(2110, 236), ["Cling to a wall by holding toward it.", "Something waits at the top of the shaft."]],
+	[Vector2(2480, 236), ["Beyond, the Shogun.", "It bends time as you do."]],
 ]
 
 const PLAYER_SPAWN := Vector2(48, 316)
@@ -73,8 +75,11 @@ const BOSS_SPAWN := Vector2(3020, 306)
 const PORTAL := Rect2(3130, 276, 30, 52)
 
 const MIN_GHOST_FRAMES := 6
+## Close-up framing like Hollow Knight: 1.5x shows 427x240 of the world, so
+## the camera also follows you up and down within the level's height.
+const CAMERA_ZOOM := 1.5
 ## Camera leads the way you're facing.
-const LOOKAHEAD := 48.0
+const LOOKAHEAD := 40.0
 const LOOKAHEAD_SPEED := 1.5
 
 const COLOR_WALL := Color("#1a1a2e")
@@ -155,6 +160,7 @@ func _ready() -> void:
 		player.hazards.append(thorn[0])
 	add_child(player)
 
+	_camera.zoom = Vector2(CAMERA_ZOOM, CAMERA_ZOOM)
 	_camera.limit_left = 0
 	_camera.limit_right = int(LEVEL_W)
 	_camera.limit_top = 0
