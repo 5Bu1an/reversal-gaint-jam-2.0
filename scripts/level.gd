@@ -74,7 +74,8 @@ func _ready() -> void:
 
 	# Roaming enemies outside the arenas.
 	_grunt(Vector2(260, 316))
-	_grunt(Vector2(520, 316))
+	# First inverted grunt, alone, so the player learns the ghost trick.
+	_inverted(_grunt(Vector2(560, 316)))
 	_drone(Vector2(850, 180))
 	_drone(Vector2(1150, 190))
 	_grunt(Vector2(1210, 316))
@@ -85,7 +86,7 @@ func _ready() -> void:
 		waves = [
 			[_grunt(Vector2(1450, 316)), _grunt(Vector2(1650, 316)), _grunt(Vector2(1800, 316))],
 			[_drone(Vector2(1450, 170)), _drone(Vector2(1750, 170)), _grunt(Vector2(1500, 316)), _grunt(Vector2(1700, 316))],
-			[_drone(Vector2(1400, 160)), _drone(Vector2(1600, 130)), _drone(Vector2(1800, 160)), _grunt(Vector2(1600, 316))],
+			[_drone(Vector2(1400, 160)), _drone(Vector2(1600, 130)), _drone(Vector2(1800, 160)), _inverted(_grunt(Vector2(1600, 316)))],
 		]
 	_arena(WAVE_ARENA_TRIGGER, WAVE_ARENA_GATES, waves)
 
@@ -153,6 +154,11 @@ func _grunt(pos: Vector2) -> Enemy:
 	var enemy := Enemy.new()
 	enemy.position = pos
 	add_child(enemy)
+	return enemy
+
+
+func _inverted(enemy: Enemy) -> Enemy:
+	enemy.inverted = true
 	return enemy
 
 

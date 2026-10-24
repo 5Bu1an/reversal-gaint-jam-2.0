@@ -2,7 +2,8 @@ class_name Boss
 extends Enemy
 ## The Kuro Shogun, arena boss. Stalks the player, then alternates a dash
 ## charge and a jump slam whose shockwaves run along the floor. Below half
-## health every wind-up and rest gets shorter.
+## health every wind-up and rest gets shorter, and it keeps flipping into an
+## inverted state where only your ghost can hurt it.
 
 enum Mode { STALK, WINDUP_CHARGE, CHARGE, WINDUP_SLAM, AIR, RECOVER }
 
@@ -13,6 +14,8 @@ const SLAM_JUMP := -420.0
 const SLAM_DRIFT := 220.0
 const WAVE_SPEED := 210.0
 const WAVE_SIZE := Vector2(10, 14)
+const INVERTED_TIME := 3.5
+const NORMAL_TIME := 3.0
 
 const COLOR_ARMOR := Color("#2a2140")
 const COLOR_TRIM := Color("#ff2a6d")
@@ -27,6 +30,8 @@ var mode_t := 1.0
 var attacks := 0
 ## Live shockwaves as (x, floor_y, dir).
 var waves: Array[Vector3] = []
+## Counts down to the next inverted/normal flip once enraged.
+var invert_t := 0.0
 
 
 func _init() -> void:
@@ -44,6 +49,13 @@ func _act(delta: float) -> void:
 	mode_t = maxf(mode_t - delta, 0.0)
 	velocity.y = minf(velocity.y + GRAVITY * delta, MAX_FALL)
 	var pace := 0.6 if enraged() else 1.0
+	if enraged():
+		invert_t -= delta
+		if invert_t <= 0.0:
+			inverted = not inverted
+			invert_t = INVERTED_TIME if inverted else NORMAL_TIME
+			hurt_t = HURT_TIME # flash on every flip
+			Fx.shake(3.0)
 	var player: Player = get_tree().get_first_node_in_group("player")
 	var to_player := 0
 	if player:
@@ -129,9 +141,10 @@ func take_hit(key: String, from_dir: Vector2) -> bool:
 
 func _draw_body(body: Color) -> void:
 	var armor := body if hurt_t > 0.0 else COLOR_ARMOR
+	var trim := COLOR_INVERTED if inverted else COLOR_TRIM
 	var half := size / 2
 	draw_rect(Rect2(-half, size), armor)
-	draw_rect(Rect2(-half, size), COLOR_TRIM, false, 1.0)
+	draw_rect(Rect2(-half, size), trim, false, 2.0 if inverted else 1.0)
 	# Kabuto horns.
 	draw_colored_polygon(PackedVector2Array([
 		Vector2(-half.x, -half.y), Vector2(-half.x - 8, -half.y - 12), Vector2(-half.x + 6, -half.y),
@@ -140,7 +153,7 @@ func _draw_body(body: Color) -> void:
 		Vector2(half.x, -half.y), Vector2(half.x + 8, -half.y - 12), Vector2(half.x - 6, -half.y),
 	]), COLOR_GOLD)
 	var winding := mode == Mode.WINDUP_CHARGE or mode == Mode.WINDUP_SLAM
-	var visor := Color.WHITE if winding and int(mode_t * 20.0) % 2 == 0 else COLOR_TRIM
+	var visor := Color.WHITE if winding and int(mode_t * 20.0) % 2 == 0 else trim
 	var visor_x := 0.0 if dir > 0 else -half.x
 	draw_rect(Rect2(visor_x, -half.y + 8, half.x, 4), visor)
 	if mode == Mode.CHARGE:
@@ -156,7 +169,9 @@ func _draw_body(body: Color) -> void:
 
 func capture_state() -> Dictionary:
 	var state := super()
-	state.merge({"mode": mode, "mode_t": mode_t, "attacks": attacks, "waves": waves.duplicate()})
+	state.merge({
+		"mode": mode, "mode_t": mode_t, "attacks": attacks, "waves": waves.duplicate(), "invert_t": invert_t,
+	})
 	return state
 
 

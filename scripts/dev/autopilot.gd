@@ -4,7 +4,9 @@ extends Node
 ##   godot --path . --fixed-fps 60 -- --autopilot=fight --shots=/tmp/shots
 ## It presses inputs on fixed physics frames, saves screenshots and prints a
 ## state line at each shot, then quits. --checkpoint=1 starts at the shrine.
-## Plans: fight, arena (waves, rewind undo, gates), boss, win.
+## Plans: fight, arena (waves, rewind undo, gates), boss, win, retrace,
+## inverted (only the ghost can hurt inverted enemies), boss2 (enraged boss
+## flipping between normal and inverted; use with --checkpoint=1).
 
 const PLANS := {
 	"fight": [
@@ -67,6 +69,25 @@ func _make_plan(plan_name: String) -> Array:
 				[125, "press", "rewind"], [185, "release", "rewind"], [200, "quit", ""]]
 			for f in range(65, 186, 5):
 				plan.append([f, "trace", ""])
+		"inverted":
+			# Slash the intro's inverted grunt (should bounce off), then rewind
+			# so the ghost replays those slashes (should land).
+			plan = [[1, "god", ""], [1, "warp", 500], [80, "press", "rewind"], [150, "release", "rewind"],
+				[152, "shot", "2_ghost"], [260, "quit", ""]]
+			for f in [30, 50, 70]:
+				plan.append([f, "tap", "attack"])
+			for f in [29, 76, 152, 200, 255]:
+				plan.append([f, "trace", ""])
+			plan.append([76, "shot", "1_deflected"])
+		"boss2":
+			plan = [[1, "god", ""], [5, "press", "move_right"], [290, "release", "move_right"],
+				[291, "boss_half", ""], [700, "quit", ""]]
+			for f in range(300, 690, 20):
+				plan.append([f, "face_boss", ""])
+				plan.append([f + 1, "tap", "attack"])
+			for f in range(300, 700, 30):
+				plan.append([f, "boss_trace", ""])
+			plan.append([420, "shot", "boss2"])
 		"win":
 			plan = [[1, "god", ""], [5, "press", "move_right"], [260, "kill_boss", ""],
 				[300, "shot", "1_portal_open"], [600, "shot", "2_won"], [620, "quit", ""]]
@@ -96,8 +117,11 @@ func _physics_process(_delta: float) -> void:
 				get_tree().get_first_node_in_group("player").hp = 999
 			"trace":
 				var p: Player = get_tree().get_first_node_in_group("player")
-				print("[trace] frame=%d rewinding=%s pos=(%.1f,%.1f) facing=%d attack_t=%.2f" % [
-					_frame, Rewind.is_rewinding, p.position.x, p.position.y, p.facing, p.attack_t])
+				var inverted := get_tree().get_nodes_in_group("enemies").filter(func(e: Enemy) -> bool:
+					return e.inverted and not e.dormant).map(func(e: Enemy) -> String:
+					return "%d@%d" % [e.hp, int(e.position.x)])
+				print("[trace] frame=%d rewinding=%s pos=(%.1f,%.1f) facing=%d attack_t=%.2f inverted=%s" % [
+					_frame, Rewind.is_rewinding, p.position.x, p.position.y, p.facing, p.attack_t, inverted])
 			"warp":
 				get_tree().get_first_node_in_group("player").position.x = step[2]
 			"face_boss":
@@ -108,6 +132,11 @@ func _physics_process(_delta: float) -> void:
 					if enemy.is_active():
 						enemy.hp = 0
 						enemy.dead = true
+			"boss_half":
+				Game.boss.hp = Game.boss.max_hp / 2
+			"boss_trace":
+				print("[boss] frame=%d hp=%d inverted=%s invert_t=%.1f mode=%s" % [_frame, Game.boss.hp,
+					Game.boss.inverted, Game.boss.invert_t, Boss.Mode.keys()[Game.boss.mode]])
 			"kill_boss":
 				Game.boss.hp = 0
 				Game.boss.dead = true
