@@ -347,8 +347,15 @@ func _physics_process(_delta: float) -> void:
 	for action in _taps:
 		Input.action_release(action)
 	_taps.clear()
+	# At normal speed the level can still be loading (title screen hand-off,
+	# a reboot); steps that need the player wait a few frames for it.
+	var later: Array = []
+	var no_player: bool = get_tree().get_first_node_in_group("player") == null
 	for step in _plan:
 		if step[0] != _frame:
+			continue
+		if no_player and step[1] not in ["shot", "quit", "quit_if_shots", "caption", "press", "release", "tap"]:
+			later.append([_frame + 5, step[1], step[2]])
 			continue
 		match step[1]:
 			"press":
@@ -508,6 +515,7 @@ func _physics_process(_delta: float) -> void:
 			"kill_boss":
 				Game.boss.hp = 0
 				Game.boss.dead = true
+	_plan.append_array(later)
 	_frame += 1
 
 
