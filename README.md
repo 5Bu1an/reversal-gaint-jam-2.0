@@ -27,5 +27,14 @@ fights alongside you.
 - `scripts/`, `scenes/` — code and scenes (Arjun + Claude)
 - `assets/art/`, `assets/audio/` — art and sound (see [docs/ART_SPEC.md](docs/ART_SPEC.md))
 
+## Scripted playtests
+
+`scripts/dev/autopilot.gd` plays the game from a fixed input plan, prints the
+game state and saves screenshots. It does nothing in a normal run.
+
+```bash
+godot --path . --fixed-fps 60 -- --autopilot=fight --shots=/absolute/output/dir
+```
+
 To avoid merge conflicts, only edit files in your own folders. Pull before you
 start, commit small, push often.
