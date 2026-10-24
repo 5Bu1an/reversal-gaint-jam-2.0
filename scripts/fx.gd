@@ -53,6 +53,23 @@ func hit_stop(seconds: float) -> void:
 	Engine.time_scale = 1.0
 
 
+## Fading cyan copy of a sprite's current frame, left behind in the world.
+func afterimage(sprite: AnimatedSprite2D) -> void:
+	if Rewind.is_rewinding:
+		return
+	var copy := Sprite2D.new()
+	copy.texture = sprite.sprite_frames.get_frame_texture(sprite.animation, sprite.frame)
+	copy.centered = false
+	copy.flip_h = sprite.flip_h
+	copy.global_position = sprite.global_position
+	copy.modulate = Color(0.3, 0.95, 1.0, 0.55)
+	copy.z_index = -1
+	get_tree().current_scene.add_child(copy)
+	var tween := copy.create_tween()
+	tween.tween_property(copy, "modulate:a", 0.0, 0.22)
+	tween.tween_callback(copy.queue_free)
+
+
 ## Burst of sparks at a world position. dir biases them (zero = all around).
 func sparks(pos: Vector2, color: Color, count := 10, dir := Vector2.ZERO) -> void:
 	if Rewind.is_rewinding:

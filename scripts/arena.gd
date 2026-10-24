@@ -47,6 +47,8 @@ func _ready() -> void:
 
 func _physics_process(_delta: float) -> void:
 	queue_redraw()
+	if not _gate_shapes.is_empty() and _gate_shapes[0].disabled == _gates_closed():
+		_sync_gates() # god mode was toggled
 	if Rewind.is_rewinding:
 		return
 	var player: Player = get_tree().get_first_node_in_group("player")
@@ -78,13 +80,18 @@ func _start_wave() -> void:
 		enemy.activate()
 
 
+## Gates are solid only mid-fight, and never in god mode (testing).
+func _gates_closed() -> bool:
+	return phase == Phase.FIGHTING and not Game.god_mode
+
+
 func _sync_gates() -> void:
 	for shape in _gate_shapes:
-		shape.set_deferred("disabled", phase != Phase.FIGHTING)
+		shape.set_deferred("disabled", not _gates_closed())
 
 
 func _draw() -> void:
-	if phase != Phase.FIGHTING:
+	if not _gates_closed():
 		return
 	var pulse := 0.6 + 0.4 * sin(Time.get_ticks_msec() / 120.0)
 	for rect in gates:

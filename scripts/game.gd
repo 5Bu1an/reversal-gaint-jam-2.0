@@ -16,6 +16,9 @@ signal checkpoint_reached(index: int)
 var checkpoint := 0
 var state := State.PLAYING
 var boss: Boss
+## Testing: no damage. F1 toggles; launch with -- --god to start on.
+var god_mode := "--god" in OS.get_cmdline_user_args()
+var _f1_held := false
 
 
 func _ready() -> void:
@@ -23,6 +26,9 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
+	if Input.is_key_pressed(KEY_F1) and not _f1_held:
+		god_mode = not god_mode
+	_f1_held = Input.is_key_pressed(KEY_F1)
 	if Input.is_action_just_pressed("ui_cancel"):
 		if state == State.PLAYING:
 			set_paused(true)

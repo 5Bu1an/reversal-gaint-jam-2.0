@@ -4,7 +4,7 @@ extends CharacterBody2D
 ## and pogo off enemies with a down-slash. Drawn as placeholder shapes until
 ## sprites land in assets/art.
 
-const SIZE := Vector2(12, 24)
+const SIZE := Vector2(12, 28)
 const RUN_SPEED := 150.0
 const GRAVITY := 980.0
 const MAX_FALL := 420.0
@@ -41,6 +41,10 @@ var attack_dir := Vector2.RIGHT
 var attack_id := 0
 var invuln_t := 0.0
 var hurt_t := 0.0
+var grounded := true
+
+var _sprite := RoninSprite.new()
+var _afterimage_t := 0.0
 
 ## Damage rects in world space, set by the level.
 var hazards: Array[Rect2] = []
@@ -57,40 +61,6 @@ static func attack_rect(origin: Vector2, dir: Vector2) -> Rect2:
 	return Rect2(x, origin.y - 12, 28, 22)
 
 
-## Dark cloaked silhouette outlined in body colour, glowing visor, scarf
-## trailing behind. Placeholder until the player sprite sheet lands.
-static func draw_body(canvas: CanvasItem, f: int, body: Color, visor: Color) -> void:
-	var fill := body.darkened(0.78)
-	var sway := sin(Time.get_ticks_msec() / 140.0)
-	canvas.draw_line(Vector2(-f * 3, -3), Vector2(-f * 11, -4 + sway), body, 2.0)
-	canvas.draw_line(Vector2(-f * 9, -3 + sway), Vector2(-f * 14, -1 + sway * 1.5), body, 1.0)
-	var cloak := PackedVector2Array([Vector2(-4, -4), Vector2(4, -4), Vector2(7, 12), Vector2(-7, 12)])
-	canvas.draw_colored_polygon(cloak, fill)
-	canvas.draw_polyline(cloak + PackedVector2Array([cloak[0]]), body, 1.0)
-	var head := Rect2(-5, -12, 10, 8)
-	canvas.draw_rect(head, fill)
-	canvas.draw_rect(head, body, false, 1.0)
-	var visor_x := -1.0 if f > 0 else -5.0
-	canvas.draw_rect(Rect2(visor_x, -9, 6, 2), visor)
-
-
-## Crescent blade arc pointing along dir.
-static func draw_slash(canvas: CanvasItem, origin: Vector2, dir: Vector2, color: Color) -> void:
-	var center := attack_rect(origin, dir).get_center() - origin
-	var angle := dir.angle()
-	var outer := PackedVector2Array()
-	var points := PackedVector2Array()
-	for i in 9:
-		var a := angle - 1.1 + 2.2 * i / 8.0
-		outer.append(center - dir * 8.0 + Vector2.from_angle(a) * 16.0)
-	points.append_array(outer)
-	for i in range(8, -1, -1):
-		var a := angle - 0.85 + 1.7 * i / 8.0
-		points.append(center - dir * 10.0 + Vector2.from_angle(a) * 11.0)
-	canvas.draw_colored_polygon(points, Color(color, 0.7))
-	canvas.draw_polyline(outer, Color.WHITE, 1.0)
-
-
 func _ready() -> void:
 	add_to_group("rewindable")
 	add_to_group("player")
@@ -100,10 +70,12 @@ func _ready() -> void:
 	shape.shape = RectangleShape2D.new()
 	shape.shape.size = SIZE
 	add_child(shape)
+	add_child(_sprite)
 
 
 func _physics_process(delta: float) -> void:
-	queue_redraw()
+	_sprite.show_state(capture_state())
+	_sprite.visible = invuln_t <= 0.0 or dead or int(invuln_t * 20.0) % 2 == 0
 	if Rewind.is_rewinding or dead:
 		return
 	_tick_timers(delta)
@@ -139,10 +111,24 @@ func _physics_process(delta: float) -> void:
 		if Input.is_action_just_pressed("attack") and attack_cd <= 0.0:
 			_start_attack()
 
+	var was_falling := velocity.y
 	move_and_slide()
+	_feel(was_falling, delta)
 	if attack_t > 0.0:
 		_resolve_attack()
 	_check_damage()
+
+
+## Dust when landing hard and afterimages while dashing.
+func _feel(fall_speed: float, delta: float) -> void:
+	var now_grounded := is_on_floor()
+	if now_grounded and not grounded and fall_speed > 200.0:
+		Fx.sparks(position + Vector2(0, SIZE.y / 2), Color(0.75, 0.7, 0.9, 0.7), 8, Vector2.UP)
+	grounded = now_grounded
+	_afterimage_t -= delta
+	if dash_t > 0.0 and _afterimage_t <= 0.0:
+		_afterimage_t = 0.035
+		Fx.afterimage(_sprite)
 
 
 func _tick_timers(delta: float) -> void:
@@ -208,6 +194,8 @@ func _check_damage() -> void:
 
 
 func _take_damage(source: Vector2) -> void:
+	if Game.god_mode:
+		return
 	hp -= 1
 	invuln_t = INVULN_TIME
 	hurt_t = HURT_TIME
@@ -226,23 +214,12 @@ func _take_damage(source: Vector2) -> void:
 		velocity = Vector2.ZERO
 
 
-func _draw() -> void:
-	var body := COLOR_BODY
-	if dead:
-		body = Color(0.35, 0.35, 0.4)
-	elif invuln_t > 0.0 and int(invuln_t * 20.0) % 2 == 0:
-		body = Color.WHITE
-	draw_body(self, facing, body, COLOR_VISOR)
-	if attack_t > 0.0:
-		draw_slash(self, position, attack_dir, COLOR_VISOR)
-
-
 func capture_state() -> Dictionary:
 	return {
 		"position": position, "velocity": velocity, "facing": facing, "hp": hp, "dead": dead,
 		"dash_t": dash_t, "dash_cd": dash_cd, "air_dash_used": air_dash_used,
 		"attack_t": attack_t, "attack_cd": attack_cd, "attack_dir": attack_dir, "attack_id": attack_id,
-		"invuln_t": invuln_t, "hurt_t": hurt_t, "coyote_t": coyote_t,
+		"invuln_t": invuln_t, "hurt_t": hurt_t, "coyote_t": coyote_t, "grounded": grounded,
 	}
 
 

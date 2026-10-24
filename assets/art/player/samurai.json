@@ -1,0 +1,72 @@
+{
+ "cell": 90,
+ "feet_y": 84,
+ "anims": {
+  "idle": {
+   "row": 0,
+   "frames": 6,
+   "fps": 8,
+   "loop": true
+  },
+  "run": {
+   "row": 1,
+   "frames": 8,
+   "fps": 14,
+   "loop": true
+  },
+  "jump": {
+   "row": 2,
+   "frames": 2,
+   "fps": 10,
+   "loop": true
+  },
+  "fall": {
+   "row": 3,
+   "frames": 2,
+   "fps": 8,
+   "loop": true
+  },
+  "land": {
+   "row": 4,
+   "frames": 2,
+   "fps": 16,
+   "loop": false
+  },
+  "dash": {
+   "row": 5,
+   "frames": 3,
+   "fps": 18,
+   "loop": true
+  },
+  "slash_side": {
+   "row": 6,
+   "frames": 4,
+   "fps": 26,
+   "loop": false
+  },
+  "slash_up": {
+   "row": 7,
+   "frames": 4,
+   "fps": 26,
+   "loop": false
+  },
+  "slash_down": {
+   "row": 8,
+   "frames": 4,
+   "fps": 26,
+   "loop": false
+  },
+  "hurt": {
+   "row": 9,
+   "frames": 2,
+   "fps": 10,
+   "loop": false
+  },
+  "dead": {
+   "row": 10,
+   "frames": 1,
+   "fps": 1,
+   "loop": false
+  }
+ }
+}

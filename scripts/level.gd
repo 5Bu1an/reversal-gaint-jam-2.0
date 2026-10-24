@@ -54,6 +54,13 @@ const COLOR_WALL := Color("#1a1a2e")
 const COLOR_EDGE := Color("#05d9e8")
 const COLOR_SPIKE := Color("#ff2a6d")
 const COLOR_SHRINE := Color("#f5c542")
+const COLOR_DEEP := Color("#140c22")
+const COLOR_POST := Color("#1b3a48")
+
+## Deck art is drawn at half size (one art pixel per screen pixel) and sunk
+## so feet land on the middle of its top face.
+const DECK_SCALE := 0.5
+const DECK_SINK := 5.0
 
 var player: Player
 var boss: Boss
@@ -66,7 +73,7 @@ func _ready() -> void:
 	Rewind.reset()
 	Sfx.play_music()
 	Game.set_state(Game.State.PLAYING)
-	_build_skyline()
+	add_child(preload("res://scripts/env/backdrop.gd").new())
 	for rect in SOLIDS:
 		_add_solid(rect)
 	for pos in SHARDS:
@@ -209,13 +216,28 @@ func _add_solid(rect: Rect2) -> void:
 	add_child(body)
 
 
-## Neon signs, fog, foreground silhouettes and glow.
+## Street facade, sky traffic, street lamps, fog, foreground silhouettes
+## and glow.
 func _build_scenery() -> void:
-	var signs_layer := Parallax2D.new()
-	signs_layer.scroll_scale = Vector2(0.7, 1.0)
-	signs_layer.z_index = -5
-	signs_layer.add_child(preload("res://scripts/scenery/neon_signs.gd").new())
-	add_child(signs_layer)
+	var street := Parallax2D.new()
+	street.scroll_scale = Vector2(0.85, 1.0)
+	street.z_index = -4
+	street.add_child(preload("res://scripts/env/facade.gd").new())
+	add_child(street)
+
+	var sky := Parallax2D.new()
+	sky.scroll_scale = Vector2(0.3, 1.0)
+	sky.z_index = -18
+	sky.add_child(preload("res://scripts/env/traffic.gd").new())
+	add_child(sky)
+
+	for x in range(150, int(LEVEL_W) - 100, 260):
+		if Sectors.index_at(x) == 3:
+			continue # the shrine keeps its own light
+		var lamp := Warped.piece(Warped.WC1_TILES, Warped.CLUTTER.lamp)
+		lamp.position = Vector2(x, FLOOR_Y - Warped.CLUTTER.lamp.size.y)
+		lamp.z_index = -2
+		add_child(lamp)
 
 	var fog := ColorRect.new()
 	fog.size = Vector2(LEVEL_W, 360)
@@ -244,37 +266,6 @@ func _build_scenery() -> void:
 	add_child(world_env)
 
 
-## Two parallax skyline layers so the long level doesn't read as a void.
-func _build_skyline() -> void:
-	var layers := [
-		[0.2, Color("#10101c"), 120.0, []],
-		[0.5, Color("#16162a"), 70.0, [COLOR_SPIKE, COLOR_EDGE]],
-	]
-	for layer: Array in layers:
-		var parallax := Parallax2D.new()
-		parallax.scroll_scale = Vector2(layer[0], 1.0)
-		parallax.repeat_size = Vector2(640, 0)
-		parallax.repeat_times = 3
-		parallax.z_index = -10
-		for i in 14:
-			var w := 30.0 + float((i * 37 + int(layer[2])) % 23)
-			var h: float = layer[2] + float((i * 53) % 120)
-			var x := i * 46.0
-			var building := ColorRect.new()
-			building.color = layer[1]
-			building.position = Vector2(x, FLOOR_Y - h)
-			building.size = Vector2(w, h)
-			parallax.add_child(building)
-			var signs: Array = layer[3]
-			if not signs.is_empty() and i % 3 == 0:
-				var sign_rect := ColorRect.new()
-				sign_rect.color = Color(signs[i % signs.size()], 0.5)
-				sign_rect.position = Vector2(x + 6, FLOOR_Y - h + 12)
-				sign_rect.size = Vector2(4, 22)
-				parallax.add_child(sign_rect)
-		add_child(parallax)
-
-
 func _draw() -> void:
 	_draw_haze()
 	for rect in SOLIDS:
@@ -300,37 +291,61 @@ func _draw_haze() -> void:
 		var x1 := Sectors.end_of(i, LEVEL_W)
 		var accent: Color = Sectors.LIST[i].accent
 		var clear := Color(accent, 0.0)
-		var glow := Color(accent, 0.08)
+		var glow := Color(accent, 0.06)
 		draw_polygon(
 			PackedVector2Array([Vector2(x0, FLOOR_Y - 180), Vector2(x1, FLOOR_Y - 180), Vector2(x1, FLOOR_Y), Vector2(x0, FLOOR_Y)]),
 			PackedColorArray([clear, clear, glow, glow]))
 
 
-## Dark panelled block with a glowing neon strip along its walkable top edge,
-## split per sector so the strip changes colour at each boundary.
+## Warped City walkway deck along every walkable top, support posts under
+## floating platforms, a block texture on the side walls and a girder for
+## the ceiling. Collision is still the plain rect; this is only the look.
+## A thin neon strip in the sector's accent marks the walkable edge.
 func _draw_solid(rect: Rect2) -> void:
-	draw_rect(rect, COLOR_WALL)
-	var seam := COLOR_WALL.darkened(0.35)
-	for x in range(int(rect.position.x) + 32, int(rect.end.x), 32):
-		draw_line(Vector2(x, rect.position.y + 3), Vector2(x, rect.end.y), seam, 1.0)
-	if rect.size.y > 20.0:
-		draw_line(Vector2(rect.position.x, rect.position.y + 8), Vector2(rect.end.x, rect.position.y + 8), seam, 1.0)
 	if rect.position.y <= 0.0:
-		# Ceiling: dim underside instead of a walkable strip.
-		draw_line(Vector2(rect.position.x, rect.end.y), Vector2(rect.end.x, rect.end.y), Color(COLOR_EDGE, 0.25), 1.0)
+		draw_rect(rect, COLOR_DEEP)
+		_draw_deck(rect, rect.end.y - Warped.DECK.size.y * DECK_SCALE, true)
 		return
 	if rect.size.x < 20.0:
-		return # side walls
+		_draw_wall(rect)
+		return
+	if rect.end.y < FLOOR_Y:
+		for post_x in [rect.position.x + 8.0, rect.end.x - 12.0]:
+			draw_rect(Rect2(post_x, rect.end.y, 3, FLOOR_Y - rect.end.y), COLOR_POST)
+			draw_rect(Rect2(post_x + 3, rect.end.y, 1, FLOOR_Y - rect.end.y), COLOR_DEEP)
+	else:
+		draw_rect(Rect2(rect.position.x, rect.position.y + 10, rect.size.x, rect.size.y), COLOR_DEEP)
+	_draw_deck(rect, rect.position.y - DECK_SINK, false)
 	for i in Sectors.LIST.size():
 		var x0 := maxf(rect.position.x, Sectors.LIST[i].start)
 		var x1 := minf(rect.end.x, Sectors.end_of(i, LEVEL_W))
-		if x1 <= x0:
-			continue
-		var accent: Color = Sectors.LIST[i].accent
-		var y := rect.position.y
-		draw_rect(Rect2(x0, y - 2, x1 - x0, 2), Color(accent, 0.18))
-		draw_rect(Rect2(x0, y + 1, x1 - x0, 3), Color(accent, 0.22))
-		draw_line(Vector2(x0, y), Vector2(x1, y), accent.lightened(0.2), 1.0)
+		if x1 > x0:
+			var accent: Color = Sectors.LIST[i].accent
+			draw_line(Vector2(x0, rect.position.y), Vector2(x1, rect.position.y), Color(accent, 0.55), 1.0)
+
+
+## Tiles the deck art across rect's width with its top at top_y.
+func _draw_deck(rect: Rect2, top_y: float, flip: bool) -> void:
+	var tile := Warped.DECK.size * DECK_SCALE
+	var x := rect.position.x
+	while x < rect.end.x:
+		var w := minf(tile.x, rect.end.x - x)
+		var src := Rect2(Warped.DECK.position, Vector2(w / DECK_SCALE, Warped.DECK.size.y))
+		var dest := Rect2(x, top_y, w, tile.y)
+		if flip:
+			dest = Rect2(x, top_y + tile.y, w, -tile.y)
+		draw_texture_rect_region(Warped.WC2_TILES, dest, src)
+		x += tile.x
+
+
+func _draw_wall(rect: Rect2) -> void:
+	var tile := Warped.BLOCK.size * DECK_SCALE
+	var y := rect.position.y
+	while y < rect.end.y:
+		var h := minf(tile.y, rect.end.y - y)
+		var src := Rect2(Warped.BLOCK.position, Vector2(Warped.BLOCK.size.x, h / DECK_SCALE))
+		draw_texture_rect_region(Warped.WC2_TILES, Rect2(rect.position.x, y, rect.size.x, h), src)
+		y += tile.y
 
 
 ## Neon torii gate marking the checkpoint; lights up once reached.

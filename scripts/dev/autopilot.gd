@@ -59,6 +59,22 @@ func _make_plan(plan_name: String) -> Array:
 			plan += [[420, "shot", "2_boss_mid"], [600, "shot", "3_boss_late"],
 				[700, "press", "rewind"], [740, "shot", "4_boss_rewind"], [760, "release", "rewind"],
 				[766, "shot", "5_boss_ghost"], [900, "quit", ""]]
+		"moves":
+			plan = [[1, "god", ""], [20, "shot", "1_idle"],
+				[30, "press", "move_right"], [40, "shot", "2_run"], [50, "release", "move_right"],
+				[60, "press", "jump"], [66, "shot", "3_jump"], [75, "release", "jump"], [88, "shot", "4_fall"],
+				[110, "tap", "dash"], [113, "shot", "5_dash"],
+				[140, "tap", "attack"], [143, "shot", "6_slash"],
+				[170, "press", "move_up"], [171, "tap", "attack"], [174, "shot", "7_slash_up"], [180, "release", "move_up"],
+				[200, "press", "jump"], [214, "release", "jump"], [216, "press", "move_down"], [217, "tap", "attack"],
+				[220, "shot", "8_slash_down"], [226, "release", "move_down"], [260, "quit", ""]]
+		"tour":
+			plan = [[1, "god", ""]]
+			var stops := [[300, "1_lower_ring"], [930, "2_grinder"], [1580, "3_killbox"], [2240, "4_shrine"], [2900, "5_throne"]]
+			for i in stops.size():
+				plan.append([10 + i * 60, "warp", stops[i][0]])
+				plan.append([55 + i * 60, "shot", stops[i][1]])
+			plan.append([10 + stops.size() * 60, "quit", ""])
 		"title":
 			plan = [[40, "shot", "1_title"], [50, "tap", "move_down"], [60, "tap", "jump"], [80, "shot", "2_controls"],
 				[90, "tap", "jump"], [100, "tap", "move_up"], [110, "tap", "jump"], [150, "shot", "3_level"],
