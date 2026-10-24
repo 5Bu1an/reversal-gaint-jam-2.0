@@ -36,6 +36,10 @@ var _taps: Array[String] = []
 var _caption := Label.new()
 ## Mouse buttons clicked by "click" steps, released on the next frame.
 var _mouse_up: Array[InputEventMouseButton] = []
+## "auto_move" state: last x, frames without progress, frames left holding jump.
+var _auto_x := 0.0
+var _auto_stuck := 0
+var _auto_hold := 0
 
 
 func _ready() -> void:
@@ -162,7 +166,7 @@ func _make_plan(plan_name: String) -> Array:
 			for f in range(4, 40, 3):
 				plan.append([f, "trace", ""])
 		"wall":
-			plan = [[1, "god", ""], [1, "warp_xy", Vector2(2220, 268)], [3, "press", "move_left"],
+			plan = [[1, "god", ""], [1, "warp_xy", Vector2(2220, 316)], [3, "press", "move_left"],
 				[5, "press", "jump"], [15, "release", "jump"]]
 			var dirs := ["move_right", "move_left"]
 			for k in 9:
@@ -175,7 +179,7 @@ func _make_plan(plan_name: String) -> Array:
 				plan.append([f, "wall_trace", ""])
 		"wall_dash":
 			# Air-dash into the chimney wall: the cling should give the dash back.
-			plan = [[1, "god", ""], [1, "warp_xy", Vector2(2220, 268)], [3, "press", "move_left"],
+			plan = [[1, "god", ""], [1, "warp_xy", Vector2(2220, 316)], [3, "press", "move_left"],
 				[5, "press", "jump"], [8, "tap", "dash"], [15, "release", "jump"], [40, "quit", ""]]
 			for f in [7, 10, 14, 18, 24, 30]:
 				plan.append([f, "wall_trace", ""])
@@ -285,6 +289,19 @@ func _make_plan(plan_name: String) -> Array:
 			for f in range(20, 400, 20):
 				plan.append([f, "grunt_trace", ""])
 				plan.append([f, "trace", ""])
+		"sprites":
+			# A look at each enemy's sprite: grunt, drone, wave arena, boss.
+			plan = [[1, "god", ""], [1, "warp_xy", Vector2(330, 316)], [40, "shot", "1_grunt"],
+				[50, "warp_xy", Vector2(1100, 316)], [110, "shot", "2_drones"],
+				[120, "warp_xy", Vector2(1400, 316)], [200, "shot", "3_arena"],
+				[210, "warp_xy", Vector2(2700, 316)], [290, "shot", "4_boss"], [300, "quit", ""]]
+		"traverse":
+			# Hold right through the whole level like a player would: jump when
+			# blocked, double jump if that's not enough. Arena fights are skipped
+			# (insta-kill) since this is about movement. Logs x every second.
+			plan = [[1, "god", ""], [1, "no_freezes", ""], [3000, "quit", ""]]
+			for f in range(2, 3000):
+				plan.append([f, "auto_move", ""])
 		"win":
 			plan = [[1, "god", ""], [250, "warp", 2680], [255, "press", "move_right"], [260, "kill_boss", ""],
 				[300, "shot", "1_portal_open"], [600, "shot", "2_won"], [620, "quit", ""]]
@@ -321,7 +338,7 @@ func _showcase() -> Array:
 
 	say.call(720, "8/10  WALL CLING + WALL JUMP\nhold toward a wall, Jump to kick off - a shard waits up the chimney")
 	var w := 725
-	plan.append_array([[w - 6, "release", "move_down"], [w, "warp_xy", Vector2(2220, 268)], [w + 4, "press", "jump"],
+	plan.append_array([[w - 6, "release", "move_down"], [w, "warp_xy", Vector2(2220, 316)], [w + 4, "press", "jump"],
 		[w + 6, "press", "move_left"], [w + 16, "release", "jump"]])
 	var dirs := ["move_right", "move_left"]
 	for k in 7:
@@ -549,6 +566,28 @@ func _physics_process(_delta: float) -> void:
 				var p: Player = get_tree().get_first_node_in_group("player")
 				print("[special] frame=%d special_cd=%.2f echoes=%d attack_damage=%d" % [
 					_frame, p.special_cd, p.echoes.size(), p.attack_damage])
+			"no_freezes":
+				Fx.freezes = false
+			"auto_move":
+				var p: Player = get_tree().get_first_node_in_group("player")
+				Input.action_press("move_right")
+				_auto_stuck = _auto_stuck + 1 if absf(p.position.x - _auto_x) < 0.4 else 0
+				_auto_x = p.position.x
+				if _auto_hold > 0:
+					_auto_hold -= 1
+					if _auto_hold == 0:
+						Input.action_release("jump")
+				elif _auto_stuck > 4 and (p.is_on_floor() or (p.velocity.y > -40.0 and p.air_jumps_left > 0)):
+					Input.action_press("jump")
+					_auto_hold = 14
+				for a: Arena in get_tree().get_nodes_in_group("rewindable").filter(func(n: Node) -> bool: return n is Arena):
+					if a.is_fighting():
+						for e: Enemy in get_tree().get_nodes_in_group("enemies"):
+							if e.is_active() and not (e is Boss):
+								e.dead = true
+				if _frame % 60 == 0:
+					print("[move] frame=%d x=%d y=%d floor=%s air_jumps=%d stuck=%d state=%s" % [_frame, p.position.x,
+						p.position.y, p.is_on_floor(), p.air_jumps_left, _auto_stuck, Game.State.keys()[Game.state]])
 			"combo_trace":
 				var p: Player = get_tree().get_first_node_in_group("player")
 				print("[combo] frame=%d step=%d combo_t=%.2f" % [_frame, p.combo_step, p.combo_t])

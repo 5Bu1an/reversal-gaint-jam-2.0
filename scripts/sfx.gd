@@ -13,6 +13,7 @@ const MUSIC_DB := -9.0
 const REWIND_PITCH := 0.6
 
 var _streams := {}
+var _variants := {}
 var _voices: Array[AudioStreamPlayer] = []
 var _next := 0
 var _music := AudioStreamPlayer.new()
@@ -39,8 +40,10 @@ func _process(delta: float) -> void:
 	_music.pitch_scale = move_toward(_music.pitch_scale, target, delta * 2.5)
 
 
+## Plays `sound`, or a random one of `sound_1`, `sound_2`... when those exist,
+## so repeated swings and clashes don't all sound the same.
 func play(sound: String, volume_db := 0.0, pitch_jitter := 0.06) -> void:
-	var stream := _stream(sound)
+	var stream := _pick(sound)
 	if stream == null:
 		return
 	var player := _voices[_next]
@@ -72,6 +75,18 @@ func _on_rewind_started() -> void:
 func _on_rewind_ended(_undone_frames: Array) -> void:
 	_rewind.stop()
 	play("rewind_end", -2.0)
+
+
+func _pick(sound: String) -> AudioStream:
+	if not _variants.has(sound):
+		var found: Array[AudioStream] = []
+		var i := 1
+		while _stream("%s_%d" % [sound, i]):
+			found.append(_stream("%s_%d" % [sound, i]))
+			i += 1
+		_variants[sound] = found
+	var options: Array = _variants[sound]
+	return options.pick_random() if not options.is_empty() else _stream(sound)
 
 
 func _stream(sound: String) -> AudioStream:

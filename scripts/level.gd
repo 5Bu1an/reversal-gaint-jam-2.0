@@ -28,9 +28,9 @@ const SOLIDS: Array[Rect2] = [
 	Rect2(1280, 16, 60, 220),
 	Rect2(1860, 16, 60, 220),
 	Rect2(1540, 290, 120, 38),
-	# 4. Shrine: a rock block under a side chimney that only a wall-jumper can
-	# climb (the walls stop just above head height on the block), and a step.
-	Rect2(2170, 280, 100, 48),
+	# 4. Shrine: a side chimney hanging over the open floor. The main path runs
+	# underneath it; jump (or double jump) up between the walls and wall-jump
+	# to the shard at the top. A step after it.
 	Rect2(2184, 16, 12, 238),
 	Rect2(2244, 16, 12, 238),
 	Rect2(2330, 296, 120, 32),
@@ -68,10 +68,13 @@ const WAVE_ARENA_TRIGGER := Rect2(1340, 16, 520, 312)
 const WAVE_ARENA_GATES: Array[Rect2] = [Rect2(1316, 236, 12, 92), Rect2(1872, 236, 12, 92)]
 const BOSS_ARENA_TRIGGER := Rect2(2640, 16, 540, 312)
 const BOSS_ARENA_GATES: Array[Rect2] = [Rect2(2576, 216, 12, 112)]
-const BOSS_SPAWN := Vector2(3020, 298)
+const BOSS_SPAWN := Vector2(3020, 288)
 const PORTAL := Rect2(3130, 276, 30, 52)
 
-const MIN_GHOST_FRAMES := 6
+## A ghost only appears for at least ~1/3 s of undone time in which you moved
+## or attacked; a tap of rewind used to leave a still "shadow" next to you.
+const MIN_GHOST_FRAMES := 20
+const MIN_GHOST_TRAVEL := 16.0
 ## Close-up framing like Hollow Knight: 1.5x shows 427x240 of the world, so
 ## the camera also follows you up and down within the level's height.
 const CAMERA_ZOOM := 1.5
@@ -96,6 +99,7 @@ const DECK_SINK := 5.0
 var player: Player
 var boss: Boss
 var _camera := Camera2D.new()
+var _portal: AnimatedSprite2D
 var _ghosts := Node2D.new()
 var _overlay := ColorRect.new()
 var _glitch := ColorRect.new()
@@ -211,12 +215,27 @@ func _physics_process(delta: float) -> void:
 	Game.set_state(Game.State.PLAYING)
 	if player.position.x >= CHECKPOINT_X:
 		Game.reach_checkpoint(1)
+	_update_portal()
 	if boss.dead and not Rewind.is_rewinding and PORTAL.has_point(player.position):
 		Game.win()
 
 
 ## Grunts stand on the floor: a spawn given at floor level is lifted so the
 ## (now taller) body sits on it.
+## The exit: a looping Rift Portal that opens once the boss is down (and
+## closes again if a rewind brings the boss back).
+func _update_portal() -> void:
+	if _portal == null:
+		_portal = AnimatedSprite2D.new()
+		_portal.sprite_frames = Sheet.effect("rift_portal", true)
+		_portal.material = Vfx.BLEND
+		_portal.position = PORTAL.get_center()
+		_portal.scale = Vector2(0.9, 0.9)
+		add_child(_portal)
+		_portal.play("play")
+	_portal.visible = boss.dead
+
+
 func _grunt(pos: Vector2) -> Enemy:
 	var enemy := Enemy.new()
 	enemy.position = Vector2(pos.x, minf(pos.y, FLOOR_Y - enemy.size.y / 2))
@@ -245,6 +264,7 @@ func _arena(trigger: Rect2, gates: Array[Rect2], waves: Array) -> void:
 func _on_rewind_started() -> void:
 	for ghost in _ghosts.get_children():
 		ghost.queue_free()
+	Fx.sprite_fx("void_implosion", player.position + Vector2(0, -10), 0.7)
 
 
 func _on_rewind_ended(undone_frames: Array) -> void:
@@ -254,9 +274,14 @@ func _on_rewind_ended(undone_frames: Array) -> void:
 			path.append(frame[player])
 	if path.size() < MIN_GHOST_FRAMES:
 		return
+	var attacked := path.any(func(f: Dictionary) -> bool: return f.attack_t > 0.0)
+	var travel: float = path[0].position.distance_to(path[-1].position)
+	if not attacked and travel < MIN_GHOST_TRAVEL:
+		return
 	var ghost := Ghost.new()
 	ghost.setup(path)
 	_ghosts.add_child(ghost)
+	Fx.sprite_fx("spectral_bloom", path[0].position + Vector2(0, -10), 0.6)
 
 
 func _add_solid(rect: Rect2) -> void:

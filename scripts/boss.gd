@@ -58,7 +58,7 @@ var reverse_t := 0.0
 
 
 func _init() -> void:
-	size = Vector2(42, 60)
+	size = Vector2(44, 80)
 	speed = 55.0
 	max_hp = 24
 	knockback = 0.0
@@ -248,6 +248,42 @@ func take_hit(key: String, from_dir: Vector2, damage := 1) -> bool:
 		Fx.kill(position, from_dir, COLOR_GOLD)
 		Fx.enemy_kill(position, from_dir, COLOR_TRIM, size)
 	return landed
+
+
+## The Kuro Shogun: LuizMelo's oni-masked samurai at 1.5x.
+func _make_sprite() -> AnimatedSprite2D:
+	var dir_path := "res://assets/art/enemies/oni_shogun/"
+	var frames := Sheet.strips(Vector2i(200, 200), {
+		"idle": [dir_path + "idle.png", 4, 8.0, true], "run": [dir_path + "run.png", 8, 12.0, true],
+		"jump": [dir_path + "jump.png", 2, 8.0, false], "fall": [dir_path + "fall.png", 2, 8.0, true],
+		"attack1": [dir_path + "attack1.png", 4, 12.0, false], "attack2": [dir_path + "attack2.png", 4, 12.0, false],
+		"take_hit": [dir_path + "take_hit.png", 3, 10.0, false], "death": [dir_path + "death.png", 7, 8.0, false],
+	})
+	return _new_sprite(frames, Vector2(97, 128), 1.5)
+
+
+func _sprite_anim() -> String:
+	match mode:
+		Mode.STALK:
+			return "run"
+		Mode.CHARGE:
+			return "attack2"
+		Mode.AIR:
+			return "jump" if velocity.y < 0.0 else "fall"
+		Mode.RECOVER:
+			return "attack1"
+		Mode.REVERSING:
+			return "take_hit"
+	return "idle"
+
+
+func show_health_bar() -> bool:
+	return false
+
+
+func _death_fx(_from_dir: Vector2) -> void:
+	Fx.sprite_fx("warm_explosion", position, 1.6)
+	Fx.sprite_fx("void_implosion", position, 1.2)
 
 
 func _draw_body(body: Color) -> void:

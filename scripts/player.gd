@@ -34,7 +34,15 @@ const DASH_SPEED := 400.0
 const DASH_TIME := 0.14
 const DASH_COOLDOWN := 0.4
 const ATTACK_TIME := 0.15
-const ATTACK_COOLDOWN := 0.3
+const ATTACK_COOLDOWN := 0.26
+## A click this soon before the cooldown ends still swings, instead of being
+## swallowed.
+const ATTACK_BUFFER := 0.15
+## Jumps allowed in mid-air before landing or grabbing a wall.
+const AIR_JUMPS := 1
+const AIR_JUMP_SPEED := 250.0
+## What enemies can hit: the drawn body (~52 px tall), not the small physics box.
+const HURT_SIZE := Vector2(18, 46)
 const POGO_VELOCITY := -340.0
 ## Landing a sideways slash pushes you back a little, like the nail does.
 const RECOIL_SPEED := 100.0
@@ -100,6 +108,8 @@ var recoil_dir := 0
 var dash_t := 0.0
 var dash_cd := 0.0
 var air_dash_used := false
+var air_jumps_left := AIR_JUMPS
+var attack_buffer_t := 0.0
 var attack_t := 0.0
 var attack_cd := 0.0
 var attack_dir := Vector2.RIGHT
@@ -148,13 +158,20 @@ var hazards: Array[Rect2] = []
 
 ## Slash hitbox for a swing, shared with the ghost so its replayed swings hit
 ## exactly where the original did.
+## Sized to the drawn sword, which reaches well past the small physics box.
 static func attack_rect(origin: Vector2, dir: Vector2) -> Rect2:
 	if dir == Vector2.UP:
-		return Rect2(origin + Vector2(-12, -38), Vector2(24, 26))
+		return Rect2(origin + Vector2(-20, -64), Vector2(40, 48))
 	if dir == Vector2.DOWN:
-		return Rect2(origin + Vector2(-12, 12), Vector2(24, 26))
-	var x := origin.x + 6.0 if dir.x > 0 else origin.x - 34.0
-	return Rect2(x, origin.y - 12, 28, 22)
+		return Rect2(origin + Vector2(-20, 4), Vector2(40, 44))
+	var x := origin.x + 2.0 if dir.x > 0 else origin.x - 46.0
+	return Rect2(x, origin.y - 30, 44, 42)
+
+
+## The body enemies can hit, standing on the same feet as the physics box.
+func hurt_rect() -> Rect2:
+	var feet := position.y + SIZE.y / 2
+	return Rect2(position.x - HURT_SIZE.x / 2, feet - HURT_SIZE.y, HURT_SIZE.x, HURT_SIZE.y)
 
 
 func _ready() -> void:
@@ -225,8 +242,11 @@ func _physics_process(delta: float) -> void:
 	if is_on_floor():
 		coyote_t = COYOTE_TIME
 		air_dash_used = false
+		air_jumps_left = AIR_JUMPS
 	if Input.is_action_just_pressed("jump"):
 		buffer_t = JUMP_BUFFER
+	if Input.is_action_just_pressed("attack") and attack_cd > 0.0:
+		attack_buffer_t = ATTACK_BUFFER
 
 	var input_x := Input.get_axis("move_left", "move_right")
 	if dash_slash_t > 0.0:
@@ -250,6 +270,7 @@ func _physics_process(delta: float) -> void:
 			wall_t = WALL_COYOTE
 			wall_dir = int(signf(wall_x))
 			air_dash_used = false
+			air_jumps_left = AIR_JUMPS
 		if wall_lock_t > 0.0:
 			velocity.x = wall_dir * WALL_JUMP_X
 		elif recoil_t > 0.0:
@@ -296,6 +317,16 @@ func _physics_process(delta: float) -> void:
 			squash = Vector2(0.75, 1.3)
 			Fx.dust(_feet(), 3)
 			Sfx.play("jump")
+		elif buffer_t > 0.0 and air_jumps_left > 0:
+			# Double jump: a fresh, slightly lower jump in mid-air.
+			velocity.y = -AIR_JUMP_SPEED
+			jump_hold_t = JUMP_HOLD
+			buffer_t = 0.0
+			air_jumps_left -= 1
+			squash = Vector2(0.7, 1.35)
+			Fx.sprite_fx("landing_dust", _feet() + Vector2(0, -16), 0.6)
+			Fx.burst(_feet(), Color(0.8, 0.95, 1.0, 0.7), 8, 90.0, 60.0, Vector2.DOWN)
+			Sfx.play("jump", 0.0, 0.0)
 		if Input.is_action_just_released("jump") and velocity.y < 0.0:
 			jump_hold_t = 0.0
 			velocity.y = maxf(velocity.y, -JUMP_RELEASE_SPEED)
@@ -307,6 +338,7 @@ func _physics_process(delta: float) -> void:
 			air_dash_used = not is_on_floor()
 			squash = Vector2(1.35, 0.8)
 			Fx.burst(position, COLOR_VISOR, 4, 80.0, 30.0, Vector2(-facing, 0))
+			Fx.sprite_fx("smoke_puff", position + Vector2(-facing * 10, 4), 0.5, 0.0, facing < 0, null, false)
 			Sfx.play("dash")
 		if blocking:
 			pass
@@ -317,7 +349,8 @@ func _physics_process(delta: float) -> void:
 				_cyclone_slash()
 			else:
 				_echo_slash()
-		elif Input.is_action_just_pressed("attack") and attack_cd <= 0.0:
+		elif (Input.is_action_just_pressed("attack") or attack_buffer_t > 0.0) and attack_cd <= 0.0:
+			attack_buffer_t = 0.0
 			_start_attack()
 		elif Input.is_action_just_released("attack"):
 			if charge_t >= CHARGE_TIME and _aims_vertically():
@@ -328,6 +361,8 @@ func _physics_process(delta: float) -> void:
 		elif Input.is_action_pressed("attack"):
 			var was_ready := charge_t >= CHARGE_TIME
 			charge_t += delta
+			if charge_t - delta < CHARGE_GLOW_FROM and charge_t >= CHARGE_GLOW_FROM:
+				Fx.sprite_fx("focus_charge", Vector2(0, -6), 0.55, 0.0, false, self)
 			if not was_ready and charge_t >= CHARGE_TIME:
 				Fx.burst(position, Ghost.COLOR, 5, 70.0)
 				Sfx.play("charge")
@@ -337,6 +372,8 @@ func _physics_process(delta: float) -> void:
 	if is_on_floor() and not grounded and fall_speed > 150.0:
 		squash = Vector2(1.3, 0.75)
 		Fx.dust(_feet(), 4 if fall_speed > 300.0 else 2)
+		if fall_speed > 300.0:
+			Fx.sprite_fx("landing_dust", _feet() + Vector2(0, -16), 0.55, 0.0, false, null, false)
 	grounded = is_on_floor()
 	_dash_trail(delta)
 	_run_dust(delta)
@@ -381,6 +418,7 @@ func _tick_timers(delta: float) -> void:
 	dash_slash_t = maxf(dash_slash_t - delta, 0.0)
 	parry_t = maxf(parry_t - delta, 0.0)
 	combo_t = maxf(combo_t - delta, 0.0)
+	attack_buffer_t = maxf(attack_buffer_t - delta, 0.0)
 	special_cd = maxf(special_cd - delta, 0.0)
 	block_t += delta
 
@@ -397,7 +435,8 @@ func _start_attack() -> void:
 		_combo_swipe()
 	else:
 		Fx.swipe(self, attack_dir)
-	Sfx.play("slash")
+		_slash_fx(attack_dir, false, 0.0, 0.8)
+	Sfx.play("swing", -2.0)
 
 
 ## Each sideways swing in a row cuts a different way.
@@ -407,10 +446,20 @@ func _combo_swipe() -> void:
 	match combo_step:
 		0: # high to low, tilted up
 			Fx.swipe(self, attack_dir, 26.0, Color.WHITE, facing, -0.3 * facing)
+			_slash_fx(attack_dir, false, -0.3 * facing, 0.8)
 		1: # low to high, tilted down
 			Fx.swipe(self, attack_dir, 26.0, Color.WHITE, -facing, 0.3 * facing)
+			_slash_fx(attack_dir, true, 0.3 * facing, 0.8)
 		2: # wide flat finisher
 			Fx.swipe(self, attack_dir, 36.0, Color.WHITE, facing, 0.0, 0.45)
+			_slash_fx(attack_dir, false, 0.0, 1.05)
+
+
+## The Crescent Slash sprite, turned to point along the swing (its art arcs
+## across the top of the frame, i.e. upward), following the player.
+func _slash_fx(dir: Vector2, mirror: bool, tilt: float, size_by: float) -> void:
+	var turn := dir.angle() + PI / 2 + tilt
+	Fx.sprite_fx("crescent_slash", dir * 8.0 + Vector2(0, -8), size_by, turn, mirror, self)
 
 
 ## Great Slash: a double-damage swing that leaves an echo behind.
@@ -418,6 +467,7 @@ func _echo_slash() -> void:
 	_start_attack()
 	attack_damage = NAIL_ART_DAMAGE
 	Fx.swipe(self, attack_dir, 32.0)
+	_slash_fx(attack_dir, false, 0.0, 1.15)
 	echoes.append({
 		"rect": attack_rect(position, attack_dir), "dir": attack_dir, "id": attack_id, "t": ECHO_DELAY,
 	})
@@ -442,7 +492,7 @@ func _dash_slash() -> void:
 	Fx.lunge(position, attack_dir)
 	Fx.swipe(self, attack_dir, 28.0)
 	Sfx.play("dash")
-	Sfx.play("slash")
+	Sfx.play("swing")
 
 
 ## Cyclone Slash: spin in place, hitting all around a few times.
@@ -451,7 +501,7 @@ func _cyclone_slash() -> void:
 	attack_cd = CYCLONE_TIME
 	cyclone_t = CYCLONE_TIME
 	velocity.y = minf(velocity.y, 0.0)
-	Sfx.play("slash")
+	Sfx.play("swing")
 
 
 func _update_cyclone(delta: float) -> void:
@@ -469,7 +519,7 @@ func _update_cyclone(delta: float) -> void:
 				Rewind.add_time(MS_PER_HIT)
 				Fx.hit_stop(0.02)
 		if hit < CYCLONE_HITS:
-			Sfx.play("slash")
+			Sfx.play("swing", -3.0)
 
 
 ## Echo hits use a "g" key, so they count as ghost hits.
@@ -503,7 +553,7 @@ func _resolve_attack() -> void:
 			# A crisp, tiny freeze and a nudge toward the blow; the combo
 			# finisher lands harder.
 			var finisher := attack_dir.x != 0.0 and combo_step == COMBO_LENGTH - 1
-			Fx.hit_stop(0.06 if finisher else 0.03)
+			Fx.hit_stop(0.08 if finisher else 0.05)
 			Fx.kick(attack_dir, 5.0 if finisher else 3.0)
 			if attack_dir == Vector2.DOWN:
 				velocity.y = POGO_VELOCITY
@@ -523,6 +573,7 @@ func _check_damage() -> void:
 			return
 	if invuln_t > 0.0 or parry_t > 0.0:
 		return
+	body = hurt_rect()
 	for enemy: Enemy in get_tree().get_nodes_in_group("enemies"):
 		for rect in enemy.damage_rects():
 			if not body.intersects(rect):
@@ -548,7 +599,8 @@ func _block(rect: Rect2) -> void:
 	recoil_dir = -facing
 	Fx.hit_stop(0.04)
 	Fx.impact(rect.get_center(), Vector2(-facing, 0), 0.7, Color(0.75, 0.97, 1.0))
-	Sfx.play("deflect")
+	Fx.sprite_fx("arcane_parry", rect.get_center(), 0.4)
+	Sfx.play("clash", -3.0)
 
 
 ## Time-parry: the attack is turned back, and you gain time for it.
@@ -558,7 +610,7 @@ func _parry(enemy: Enemy, rect: Rect2) -> void:
 	Rewind.add_time(PARRY_MS)
 	Fx.hit_stop(0.08)
 	Fx.parry(rect.get_center())
-	Sfx.play("deflect")
+	Sfx.play("clash")
 	recoil_t = RECOIL_TIME
 	recoil_dir = -facing
 
@@ -693,6 +745,7 @@ func capture_state() -> Dictionary:
 		"safe_pos": safe_pos, "respawn_t": respawn_t, "charge_t": charge_t, "echoes": echoes.duplicate(true),
 		"wall_t": wall_t, "wall_dir": wall_dir, "wall_lock_t": wall_lock_t,
 		"jump_hold_t": jump_hold_t, "recoil_t": recoil_t, "recoil_dir": recoil_dir,
+		"air_jumps_left": air_jumps_left, "attack_buffer_t": attack_buffer_t,
 		"attack_damage": attack_damage, "dash_slash_t": dash_slash_t, "cyclone_t": cyclone_t,
 		"parry_t": parry_t, "combo_step": combo_step, "combo_t": combo_t,
 		"blocking": blocking, "block_t": block_t, "special_cd": special_cd,
