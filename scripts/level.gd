@@ -1,6 +1,9 @@
 extends Node2D
-## The level, built from rectangles until the tileset lands. Five sections left
-## to right: intro, spike run, locked wave arena, shrine checkpoint, boss arena.
+## The level, carved out of solid rock like a Hollow Knight cave: floors that
+## step up and down, ledges that grow out of walls, ceilings that hang low,
+## and thorns on ceilings and walls (never strips on the floor). Five
+## sections left to right: intro cave, thorn tunnel and cavern, locked wave
+## arena, shrine checkpoint (with a wall-jump chimney), boss arena.
 ## Owns the player, enemies, ghosts, camera and the rewind screen effect.
 
 const LEVEL_W := 3200.0
@@ -11,46 +14,50 @@ const SOLIDS: Array[Rect2] = [
 	Rect2(0, 0, 3200, 16), # ceiling
 	Rect2(0, 0, 16, 360), # left wall
 	Rect2(3184, 0, 16, 360), # right wall
-	# 1. Intro
-	Rect2(150, 280, 80, 10),
-	Rect2(300, 236, 90, 10),
-	Rect2(460, 280, 80, 10),
-	# 2. Spike run
-	Rect2(720, 280, 48, 10),
-	Rect2(820, 262, 48, 10),
-	Rect2(980, 280, 48, 10),
-	Rect2(1060, 262, 48, 10),
-	# 3. Wave arena
-	Rect2(1400, 270, 80, 10),
-	Rect2(1560, 226, 80, 10),
-	Rect2(1720, 270, 80, 10),
-	# 4. Shrine, with a side chimney above the first platform that only a
-	# wall-jumper can climb. The walls stop just above head height on the
-	# platform, so you walk in underneath and jump up between them.
-	Rect2(2180, 280, 80, 10),
+	# 1. Intro cave: a stepped rock mound and hanging rock.
+	Rect2(180, 296, 140, 32),
+	Rect2(250, 250, 70, 46),
+	Rect2(120, 16, 60, 56),
+	Rect2(400, 16, 90, 40),
+	# 2. Thorn tunnel (low ceiling), then a cavern with a rock pillar to climb.
+	Rect2(700, 16, 220, 236),
+	Rect2(1000, 288, 40, 40),
+	Rect2(1040, 240, 44, 88),
+	Rect2(1180, 16, 80, 70),
+	# 3. Wave arena: rock over both doorways, a low mound in the middle.
+	Rect2(1280, 16, 60, 220),
+	Rect2(1860, 16, 60, 220),
+	Rect2(1540, 290, 120, 38),
+	# 4. Shrine: a rock block under a side chimney that only a wall-jumper can
+	# climb (the walls stop just above head height on the block), and a step.
+	Rect2(2170, 280, 100, 48),
 	Rect2(2184, 16, 12, 238),
 	Rect2(2244, 16, 12, 238),
-	Rect2(2330, 250, 80, 10),
-	# 5. Boss arena
-	Rect2(2700, 262, 72, 10),
-	Rect2(2990, 262, 72, 10),
+	Rect2(2330, 296, 120, 32),
+	# 5. Boss arena: rock over the doorway, a mound, a shelf on the far wall.
+	Rect2(2560, 16, 40, 200),
+	Rect2(2610, 296, 56, 32),
+	Rect2(3110, 236, 74, 20),
 ]
-const SPIKES: Array[Rect2] = [
-	Rect2(700, 320, 180, 8),
-	Rect2(950, 320, 140, 8),
+## Thorns: rect, then the way the teeth point (DOWN/UP/LEFT/RIGHT). Ceilings
+## and walls only, never strips on the floor.
+const THORNS := [
+	[Rect2(700, 252, 220, 8), Vector2.DOWN], # tunnel ceiling: full jumps hit it
+	[Rect2(1180, 86, 80, 8), Vector2.DOWN],
 ]
 const SHARDS: Array[Vector2] = [
-	Vector2(345, 222), Vector2(915, 236), Vector2(1600, 210), Vector2(2370, 236),
+	Vector2(285, 232), Vector2(1062, 222), Vector2(1600, 272), Vector2(2390, 280),
 	Vector2(2220, 46), # top of the shrine chimney
 ]
 
 ## Tutorial signs: position, then headline and detail lines.
 const HINTS := [
-	[Vector2(150, 150), ["HOLD L TO REWIND TIME", "the timeline you undo keeps fighting as a ghost"]],
+	[Vector2(110, 110), ["HOLD L TO REWIND TIME", "the timeline you undo keeps fighting as a ghost"]],
 	[Vector2(470, 100), ["OR HOLD J, THEN RELEASE", "echo slash: the echo strikes again, like a ghost"]],
 	[Vector2(470, 150), ["PURPLE = INVERTED", "your blade bounces off - swing, then rewind", "your ghost's swings land"]],
-	[Vector2(650, 150), ["S + J IN THE AIR TO POGO", "bounce off enemies to cross the spikes"]],
-	[Vector2(1230, 150), ["HITS REFILL YOUR TIME", "so do time shards"]],
+	[Vector2(640, 196), ["THORNS ABOVE", "tap jump for a short hop"]],
+	[Vector2(990, 100), ["S + J IN THE AIR TO POGO", "bounce off drones to stay up"]],
+	[Vector2(1190, 150), ["HITS REFILL YOUR TIME", "so do time shards"]],
 	[Vector2(2110, 120), ["HOLD TOWARD A WALL TO CLING", "jump to kick off - something waits up the chimney"]],
 	[Vector2(2480, 150), ["THE SHOGUN BENDS TIME TOO", "jump the shockwaves"]],
 ]
@@ -60,13 +67,16 @@ const CHECKPOINT_X := 2060.0
 const CHECKPOINT_SPAWN := Vector2(2060, 316)
 
 const WAVE_ARENA_TRIGGER := Rect2(1340, 16, 520, 312)
-const WAVE_ARENA_GATES: Array[Rect2] = [Rect2(1296, 16, 12, 312), Rect2(1892, 16, 12, 312)]
+const WAVE_ARENA_GATES: Array[Rect2] = [Rect2(1316, 236, 12, 92), Rect2(1872, 236, 12, 92)]
 const BOSS_ARENA_TRIGGER := Rect2(2640, 16, 540, 312)
-const BOSS_ARENA_GATES: Array[Rect2] = [Rect2(2576, 16, 12, 312)]
+const BOSS_ARENA_GATES: Array[Rect2] = [Rect2(2576, 216, 12, 112)]
 const BOSS_SPAWN := Vector2(3020, 306)
 const PORTAL := Rect2(3130, 276, 30, 52)
 
 const MIN_GHOST_FRAMES := 6
+## Camera leads the way you're facing.
+const LOOKAHEAD := 48.0
+const LOOKAHEAD_SPEED := 2.5
 
 const COLOR_WALL := Color("#1a1a2e")
 const COLOR_EDGE := Color("#05d9e8")
@@ -75,6 +85,7 @@ const COLOR_SHRINE := Color("#f5c542")
 
 var player: Player
 var boss: Boss
+var _camera := Camera2D.new()
 var _ghosts := Node2D.new()
 var _overlay := ColorRect.new()
 
@@ -96,20 +107,19 @@ func _ready() -> void:
 		add_child(sign_node)
 
 	# Roaming enemies outside the arenas.
-	_grunt(Vector2(260, 316))
+	_grunt(Vector2(100, 316))
 	# First inverted grunt, alone, so the player learns the ghost trick.
 	_inverted(_grunt(Vector2(560, 316)))
-	_drone(Vector2(850, 180))
-	_drone(Vector2(1150, 190))
-	_grunt(Vector2(1210, 316))
-	_grunt(Vector2(2440, 316))
+	_drone(Vector2(1130, 170))
+	_drone(Vector2(1230, 140))
+	_grunt(Vector2(2500, 316))
 
 	var waves: Array = []
 	if Game.checkpoint < 1:
 		waves = [
-			[_grunt(Vector2(1450, 316)), _grunt(Vector2(1650, 316)), _grunt(Vector2(1800, 316))],
-			[_drone(Vector2(1450, 170)), _drone(Vector2(1750, 170)), _grunt(Vector2(1500, 316)), _grunt(Vector2(1700, 316))],
-			[_drone(Vector2(1400, 160)), _drone(Vector2(1600, 130)), _drone(Vector2(1800, 160)), _inverted(_grunt(Vector2(1600, 316)))],
+			[_grunt(Vector2(1450, 316)), _grunt(Vector2(1720, 316)), _grunt(Vector2(1800, 316))],
+			[_drone(Vector2(1450, 170)), _drone(Vector2(1750, 170)), _grunt(Vector2(1480, 316)), _grunt(Vector2(1760, 316))],
+			[_drone(Vector2(1400, 160)), _drone(Vector2(1600, 130)), _drone(Vector2(1800, 160)), _inverted(_grunt(Vector2(1720, 316)))],
 		]
 	_arena(WAVE_ARENA_TRIGGER, WAVE_ARENA_GATES, waves)
 
@@ -131,18 +141,18 @@ func _ready() -> void:
 	add_child(_ghosts)
 	player = Player.new()
 	player.position = CHECKPOINT_SPAWN if Game.checkpoint >= 1 else PLAYER_SPAWN
-	player.hazards = SPIKES
+	for thorn: Array in THORNS:
+		player.hazards.append(thorn[0])
 	add_child(player)
 
-	var camera := Camera2D.new()
-	camera.limit_left = 0
-	camera.limit_right = int(LEVEL_W)
-	camera.limit_top = 0
-	camera.limit_bottom = 360
-	camera.position_smoothing_enabled = true
-	camera.position_smoothing_speed = 8.0
-	player.add_child(camera)
-	camera.reset_smoothing.call_deferred()
+	_camera.limit_left = 0
+	_camera.limit_right = int(LEVEL_W)
+	_camera.limit_top = 0
+	_camera.limit_bottom = 360
+	_camera.position_smoothing_enabled = true
+	_camera.position_smoothing_speed = 7.0
+	player.add_child(_camera)
+	_camera.reset_smoothing.call_deferred()
 
 	var hud_layer := CanvasLayer.new()
 	hud_layer.layer = 20
@@ -164,8 +174,9 @@ func _ready() -> void:
 	Rewind.rewind_ended.connect(_on_rewind_ended)
 
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	queue_redraw()
+	_camera.position.x = lerpf(_camera.position.x, player.facing * LOOKAHEAD, LOOKAHEAD_SPEED * delta)
 	_overlay.visible = Rewind.is_rewinding
 	# Don't fill the history with frames of lying dead.
 	Rewind.recording = not player.dead
@@ -268,18 +279,34 @@ func _draw() -> void:
 	for rect in SOLIDS:
 		draw_rect(rect, COLOR_WALL)
 		draw_line(rect.position, Vector2(rect.end.x, rect.position.y), COLOR_EDGE, 1.0)
-	for rect in SPIKES:
-		var teeth := int(rect.size.x / 8)
-		for t in teeth:
-			var x := rect.position.x + t * 8
-			draw_colored_polygon(PackedVector2Array([
-				Vector2(x, rect.end.y), Vector2(x + 4, rect.position.y), Vector2(x + 8, rect.end.y),
-			]), COLOR_SPIKE)
+		# Faint side edges so stacked rock reads as one mass, not floating bars.
+		draw_line(rect.position, Vector2(rect.position.x, rect.end.y), Color(COLOR_EDGE, 0.25), 1.0)
+		draw_line(Vector2(rect.end.x, rect.position.y), rect.end, Color(COLOR_EDGE, 0.25), 1.0)
+	for thorn: Array in THORNS:
+		_draw_thorns(thorn[0], thorn[1])
 	_draw_shrine()
 	if boss.dead:
 		var pulse := 0.6 + 0.4 * sin(Time.get_ticks_msec() / 150.0)
 		draw_rect(PORTAL, Color(COLOR_EDGE, 0.3 * pulse))
 		draw_rect(PORTAL, COLOR_EDGE, false, 2.0)
+
+
+## Row of teeth along a thorn rect, pointing away from the rock it grows on.
+func _draw_thorns(rect: Rect2, dir: Vector2) -> void:
+	var along := Vector2.RIGHT if dir.y != 0.0 else Vector2.DOWN
+	var length := rect.size.x if dir.y != 0.0 else rect.size.y
+	var depth := rect.size.y if dir.y != 0.0 else rect.size.x
+	# Teeth start from the side opposite to where they point.
+	var base := rect.position
+	if dir == Vector2.UP:
+		base.y = rect.end.y
+	elif dir == Vector2.LEFT:
+		base.x = rect.end.x
+	for t in int(length / 8):
+		var a := base + along * (t * 8)
+		draw_colored_polygon(PackedVector2Array([
+			a, a + along * 4 + dir * depth, a + along * 8,
+		]), COLOR_SPIKE)
 
 
 ## Neon torii gate marking the checkpoint; lights up once reached.
