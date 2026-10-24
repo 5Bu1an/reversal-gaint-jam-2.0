@@ -104,10 +104,37 @@ func _make_plan(plan_name: String) -> Array:
 				plan.append([10 + i * 60, "warp", stops[i][0]])
 				plan.append([55 + i * 60, "shot", stops[i][1]])
 			plan.append([10 + stops.size() * 60, "quit", ""])
+		"story":
+			plan = []
+			for f in [60, 200, 290, 330, 420, 470, 560, 900]:
+				plan.append([f, "shot", "story_%03d" % f])
+			plan.append([910, "quit", ""])
+		"ending":
+			plan = []
+			for f in [30, 60, 120, 200, 260, 330, 400]:
+				plan.append([f, "shot", "card_%03d" % f])
+			plan.append([410, "quit", ""])
+		"bossdeath":
+			plan = [[1, "god", ""], [5, "press", "move_right"], [330, "release", "move_right"], [400, "boss_low", ""],
+				[400, "warp", 2985]]
+			for f in range(404, 520, 12):
+				plan.append([f, "face_boss", ""])
+				plan.append([f + 1, "tap", "attack"])
+			for f in range(400, 700, 10):
+				plan.append([f, "boss_trace", ""])
+			for f in [440, 470, 500, 530, 560, 600, 660, 760]:
+				plan.append([f, "shot", "death_%03d" % f])
+			for f in range(520, 1000, 40):
+				plan.append([f, "trace_portal", ""])
+			plan.append([1000, "quit", ""])
 		"title":
-			plan = [[40, "shot", "1_title"], [50, "tap", "move_down"], [60, "tap", "jump"], [80, "shot", "2_controls"],
-				[90, "tap", "jump"], [100, "tap", "move_up"], [110, "tap", "jump"], [150, "shot", "3_level"],
-				[200, "quit", ""]]
+			plan = [[40, "shot", "1_title"], [50, "tap", "move_down"], [60, "tap", "attack"], [80, "shot", "2_controls"],
+				[90, "tap", "ui_cancel"], [100, "tap", "move_down"], [110, "tap", "attack"], [130, "shot", "3_settings"],
+				[140, "tap", "move_right"], [150, "tap", "ui_cancel"], [160, "tap", "move_up"], [170, "tap", "move_up"],
+				[180, "tap", "attack"], [230, "shot", "4_level"], [240, "tap", "ui_cancel"], [260, "shot", "5_paused"],
+				[270, "tap", "move_down"], [280, "tap", "attack"], [300, "shot", "6_pause_settings"],
+				[310, "tap", "ui_cancel"], [320, "tap", "move_down"], [330, "tap", "attack"], [380, "shot", "7_back_to_title"],
+				[390, "quit", ""]]
 		"retrace":
 			# Run, jump and slash for 2 s, then hold rewind for 1 s; the trace
 			# while rewinding should mirror the forward trace frame for frame.
@@ -661,6 +688,10 @@ func _physics_process(_delta: float) -> void:
 					if enemy.is_active():
 						enemy.hp = 0
 						enemy.dead = true
+			"trace_portal":
+				print("[portal] frame=%d dead=%s shown=%s" % [_frame, Game.boss.dead, Game.boss.death_shown])
+			"boss_low":
+				Game.boss.hp = 1
 			"boss_half":
 				Game.boss.hp = Game.boss.max_hp / 2
 				Game.boss.invert_t = 0.0 # flip to inverted right away
@@ -676,6 +707,7 @@ func _physics_process(_delta: float) -> void:
 			"kill_boss":
 				Game.boss.hp = 0
 				Game.boss.dead = true
+				Game.boss.death_shown = true # skip the finale
 	_plan.append_array(later)
 	_frame += 1
 

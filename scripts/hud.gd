@@ -169,10 +169,8 @@ func _draw_message(font: Font, player: Player) -> void:
 			msg = "SYSTEM FAILURE  -  hold REWIND or press JUMP to reboot"
 		Game.State.GAME_OVER:
 			msg = "SYSTEM FAILURE  -  press JUMP to reboot"
-		Game.State.PAUSED:
-			msg = "PAUSED  -  ESC to resume"
 		Game.State.WON:
-			msg = "TIMELINE SECURED  -  press JUMP to play again"
+			msg = "TIMELINE SECURED  -  press JUMP to continue"
 	if Game.god_mode:
 		draw_string(font, Vector2(0, 16), "GOD MODE  (F1)   ", HORIZONTAL_ALIGNMENT_RIGHT, size.x, 9, Color(1, 0.85, 0.3))
 	if msg != "":

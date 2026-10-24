@@ -25,11 +25,14 @@ func _ready() -> void:
 	for i in VOICES:
 		var player := AudioStreamPlayer.new()
 		player.process_mode = Node.PROCESS_MODE_PAUSABLE # effects pause with the game
+		player.bus = "SFX"
 		add_child(player)
 		_voices.append(player)
 	_music.volume_db = MUSIC_DB
+	_music.bus = "Music"
 	add_child(_music)
 	_rewind.volume_db = -8.0
+	_rewind.bus = "SFX"
 	add_child(_rewind)
 	Rewind.rewind_started.connect(_on_rewind_started)
 	Rewind.rewind_ended.connect(_on_rewind_ended)

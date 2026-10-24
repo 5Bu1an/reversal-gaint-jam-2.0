@@ -74,7 +74,8 @@ func _process(delta: float) -> void:
 		camera.offset = Vector2.ZERO
 		return
 	_shake = maxf(_shake - SHAKE_DECAY * delta, 0.0)
-	camera.offset = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * _shake + _kick
+	var amount := 1.0 if Settings.shake else 0.0
+	camera.offset = (Vector2(randf_range(-1, 1), randf_range(-1, 1)) * _shake + _kick) * amount
 
 
 func shake(amount: float) -> void:

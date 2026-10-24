@@ -124,7 +124,7 @@ var combo_step := 0
 var combo_t := 0.0
 ## Aim at the cursor. Input state, not part of the rewind snapshot; the
 ## autopilot turns it off so scripted swings aim with W/S.
-var aim_with_mouse := true
+var aim_with_mouse := false
 var blocking := false
 ## Time since the guard went up, for the parry window.
 var block_t := 0.0
@@ -188,8 +188,16 @@ func _ready() -> void:
 	Input.set_default_cursor_shape(Input.CURSOR_CROSS)
 
 
-## Where a slash goes: toward the cursor (turning to face it), or for the
-## autopilot up/down from W/S, else forward.
+## Aim follows whichever device attacked last: a mouse click aims at the
+## cursor, a key (J, F, Q) aims with W/S and the way you face. Mixing is fine.
+func _unhandled_input(event: InputEvent) -> void:
+	for action in ["attack", "block", "special"]:
+		if event.is_action_pressed(action):
+			aim_with_mouse = event is InputEventMouseButton
+
+
+## Where a slash goes: toward the cursor (turning to face it), or up/down
+## from W/S, else forward.
 func _face_cursor() -> void:
 	if not aim_with_mouse:
 		return
