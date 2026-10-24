@@ -112,6 +112,12 @@ func _ready() -> void:
 	Game.boss = boss
 	_arena(BOSS_ARENA_TRIGGER, BOSS_ARENA_GATES, [[boss]])
 
+	if not Game.shade.is_empty():
+		var shade := Shade.new()
+		shade.position = Game.shade.pos
+		shade.ms = Game.shade.ms
+		add_child(shade)
+
 	_ghosts.name = "Ghosts"
 	add_child(_ghosts)
 	player = Player.new()

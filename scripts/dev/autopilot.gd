@@ -8,7 +8,9 @@ extends Node
 ## inverted (only the ghost can hurt inverted enemies), boss2 (enraged boss
 ## flipping between normal and inverted; use with --checkpoint=1), reversal
 ## (burst the boss until it rewinds itself; --checkpoint=1), spikes (spike
-## costs 1 HP and warps you back to safe ground; fatal spike = real death).
+## costs 1 HP and warps you back to safe ground; fatal spike = real death),
+## shade (die with time left, collect it after the reload; die again first
+## and it's replaced).
 
 const PLANS := {
 	"fight": [
@@ -106,6 +108,17 @@ func _make_plan(plan_name: String) -> Array:
 				[201, "shot", "2_dead"], [210, "quit", ""]]
 			for f in [4, 20, 30, 45, 60, 130, 200]:
 				plan.append([f, "trace", ""])
+		"shade":
+			# Die at x=600 with time on the bar, reboot, warp back and slash the
+			# shade to collect it; then die again to leave a new one.
+			plan = [[1, "warp", 600], [3, "set_hp", 1], [4, "spike_self", ""], [30, "shade_trace", ""],
+				[40, "tap", "jump"], [45, "shade_trace", ""]]
+			# The scene reloads at 40 and Autopilot keeps counting frames.
+			plan += [[50, "shade_trace", ""], [51, "warp", 570], [60, "shot", "1_at_shade"],
+				[62, "tap", "attack"], [80, "shade_trace", ""]]
+			# Second death is above the spikes: the shade goes to safe ground.
+			plan += [[310, "shade_trace", ""], [315, "warp", 760], [320, "set_hp", 1], [321, "spike_self", ""],
+				[340, "tap", "jump"], [350, "shade_trace", ""], [360, "quit", ""]]
 		"win":
 			plan = [[1, "god", ""], [5, "press", "move_right"], [260, "kill_boss", ""],
 				[300, "shot", "1_portal_open"], [600, "shot", "2_won"], [620, "quit", ""]]
@@ -140,6 +153,16 @@ func _physics_process(_delta: float) -> void:
 					return "%d@%d" % [e.hp, int(e.position.x)])
 				print("[trace] frame=%d rewinding=%s pos=(%.1f,%.1f) hp=%d dead=%s facing=%d attack_t=%.2f inverted=%s" % [
 					_frame, Rewind.is_rewinding, p.position.x, p.position.y, p.hp, p.dead, p.facing, p.attack_t, inverted])
+			"spike_self":
+				var p: Player = get_tree().get_first_node_in_group("player")
+				p._spike_hit()
+			"shade_trace":
+				var p: Player = get_tree().get_first_node_in_group("player")
+				var shades := get_tree().get_nodes_in_group("enemies").filter(func(e: Enemy) -> bool:
+					return e is Shade and not e.dead).map(func(e: Shade) -> String:
+					return "%d@%d" % [e.ms, int(e.position.x)])
+				print("[shade] frame=%d state=%s player_x=%d time=%d Game.shade=%s nodes=%s" % [
+					_frame, Game.State.keys()[Game.state], p.position.x if p else -1, Rewind.time_ms, Game.shade, shades])
 			"set_hp":
 				get_tree().get_first_node_in_group("player").hp = step[2]
 			"warp":

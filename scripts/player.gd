@@ -256,6 +256,17 @@ func _on_safe_ground() -> bool:
 	return true
 
 
+## Where to leave the death shade: here, unless that's above spikes, where
+## it couldn't be slashed without getting hurt; then the last safe ground.
+func shade_spot() -> Vector2:
+	var left := position.x - SIZE.x / 2 - SAFE_MARGIN
+	var right := position.x + SIZE.x / 2 + SAFE_MARGIN
+	for rect in hazards:
+		if right > rect.position.x and left < rect.end.x:
+			return safe_pos
+	return position
+
+
 func _die() -> void:
 	dead = true
 	velocity = Vector2.ZERO

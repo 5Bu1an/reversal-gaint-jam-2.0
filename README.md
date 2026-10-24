@@ -21,6 +21,7 @@ fights alongside you.
 | Attack | J or X |
 | Dash | K or C |
 | Rewind (hold) | L or Shift |
+| Reboot after dying (lose your time to a shade) | Jump while down |
 
 ## Web build (itch.io)
 
