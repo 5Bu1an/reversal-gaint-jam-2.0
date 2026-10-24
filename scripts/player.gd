@@ -57,17 +57,38 @@ static func attack_rect(origin: Vector2, dir: Vector2) -> Rect2:
 	return Rect2(x, origin.y - 12, 28, 22)
 
 
+## Dark cloaked silhouette outlined in body colour, glowing visor, scarf
+## trailing behind. Placeholder until the player sprite sheet lands.
 static func draw_body(canvas: CanvasItem, f: int, body: Color, visor: Color) -> void:
-	canvas.draw_rect(Rect2(-SIZE / 2, SIZE), body)
-	var visor_x := 0.0 if f > 0 else -6.0
-	canvas.draw_rect(Rect2(visor_x, -8, 6, 3), visor)
+	var fill := body.darkened(0.78)
+	var sway := sin(Time.get_ticks_msec() / 140.0)
+	canvas.draw_line(Vector2(-f * 3, -3), Vector2(-f * 11, -4 + sway), body, 2.0)
+	canvas.draw_line(Vector2(-f * 9, -3 + sway), Vector2(-f * 14, -1 + sway * 1.5), body, 1.0)
+	var cloak := PackedVector2Array([Vector2(-4, -4), Vector2(4, -4), Vector2(7, 12), Vector2(-7, 12)])
+	canvas.draw_colored_polygon(cloak, fill)
+	canvas.draw_polyline(cloak + PackedVector2Array([cloak[0]]), body, 1.0)
+	var head := Rect2(-5, -12, 10, 8)
+	canvas.draw_rect(head, fill)
+	canvas.draw_rect(head, body, false, 1.0)
+	var visor_x := -1.0 if f > 0 else -5.0
+	canvas.draw_rect(Rect2(visor_x, -9, 6, 2), visor)
 
 
+## Crescent blade arc pointing along dir.
 static func draw_slash(canvas: CanvasItem, origin: Vector2, dir: Vector2, color: Color) -> void:
-	var r := attack_rect(origin, dir)
-	r.position -= origin
-	canvas.draw_rect(r, Color(color, 0.35))
-	canvas.draw_rect(r, color, false, 1.0)
+	var center := attack_rect(origin, dir).get_center() - origin
+	var angle := dir.angle()
+	var outer := PackedVector2Array()
+	var points := PackedVector2Array()
+	for i in 9:
+		var a := angle - 1.1 + 2.2 * i / 8.0
+		outer.append(center - dir * 8.0 + Vector2.from_angle(a) * 16.0)
+	points.append_array(outer)
+	for i in range(8, -1, -1):
+		var a := angle - 0.85 + 1.7 * i / 8.0
+		points.append(center - dir * 10.0 + Vector2.from_angle(a) * 11.0)
+	canvas.draw_colored_polygon(points, Color(color, 0.7))
+	canvas.draw_polyline(outer, Color.WHITE, 1.0)
 
 
 func _ready() -> void:
@@ -152,6 +173,15 @@ func _resolve_attack() -> void:
 			continue
 		if enemy.take_hit("p%d" % attack_id, attack_dir):
 			Rewind.add_time(MS_PER_HIT)
+			var center := rect.intersection(enemy.hurt_rect()).get_center()
+			Fx.sparks(center, COLOR_VISOR, 8, attack_dir)
+			if enemy.dead:
+				Fx.sparks(enemy.position, Color.WHITE, 18)
+				Fx.hit_stop(0.09)
+				Fx.shake(0.45)
+			else:
+				Fx.hit_stop(0.045)
+				Fx.shake(0.22)
 			if attack_dir == Vector2.DOWN:
 				velocity.y = POGO_VELOCITY
 				air_dash_used = false
@@ -181,6 +211,10 @@ func _take_damage(source: Vector2) -> void:
 	if away == 0.0:
 		away = -facing
 	velocity = Vector2(away * KNOCKBACK.x, KNOCKBACK.y)
+	Fx.sparks(position, COLOR_BODY, 14)
+	Fx.flash(COLOR_BODY, 0.28)
+	Fx.hit_stop(0.1)
+	Fx.shake(0.6)
 	if hp <= 0:
 		dead = true
 		velocity = Vector2.ZERO

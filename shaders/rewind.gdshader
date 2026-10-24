@@ -4,7 +4,7 @@ shader_type canvas_item;
 uniform sampler2D screen_texture : hint_screen_texture, filter_nearest;
 uniform float split = 0.004;
 uniform float invert = 0.9;
-uniform vec3 tint = vec3(0.35, 0.7, 0.8);
+uniform vec3 tint = vec3(0.22, 0.5, 0.6);
 
 void fragment() {
 	vec2 uv = SCREEN_UV;

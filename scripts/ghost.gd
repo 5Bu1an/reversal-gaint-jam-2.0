@@ -38,7 +38,9 @@ func _physics_process(delta: float) -> void:
 		var rect := Player.attack_rect(frame.position, frame.attack_dir)
 		for enemy: Enemy in get_tree().get_nodes_in_group("enemies"):
 			if rect.intersects(enemy.hurt_rect()):
-				enemy.take_hit("g%d_%d" % [_id, frame.attack_id], frame.attack_dir)
+				if enemy.take_hit("g%d_%d" % [_id, frame.attack_id], frame.attack_dir):
+					Fx.sparks(rect.intersection(enemy.hurt_rect()).get_center(), COLOR, 8, frame.attack_dir)
+					Fx.shake(0.15)
 	_index += 1
 
 
