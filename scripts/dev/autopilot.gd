@@ -11,7 +11,8 @@ extends Node
 ## costs 1 HP and warps you back to safe ground; fatal spike = real death),
 ## shade (die with time left, collect it after the reload; die again first
 ## and it's replaced), echo (charged slash: the swing bounces off an inverted
-## grunt, its echo lands), pogo (down-slash bounce still works).
+## grunt, its echo lands), pogo (down-slash bounce still works), wall (climb
+## the shrine chimney by wall-jumping and grab its shard).
 
 const PLANS := {
 	"fight": [
@@ -131,6 +132,24 @@ func _make_plan(plan_name: String) -> Array:
 				[8, "tap", "attack"], [40, "release", "move_down"], [60, "quit", ""]]
 			for f in range(4, 40, 3):
 				plan.append([f, "trace", ""])
+		"wall":
+			plan = [[1, "god", ""], [1, "warp_xy", Vector2(2220, 268)], [3, "press", "move_left"],
+				[5, "press", "jump"], [15, "release", "jump"]]
+			var dirs := ["move_right", "move_left"]
+			for k in 9:
+				var f := 30 + k * 22
+				plan += [[f, "release", dirs[(k + 1) % 2]], [f, "press", dirs[k % 2]], [f, "press", "jump"],
+					[f + 12, "release", "jump"]]
+			plan += [[200, "release", "move_left"], [200, "release", "move_right"], [235, "quit", ""],
+				[90, "shot", "1_climbing"]]
+			for f in range(4, 235, 8):
+				plan.append([f, "wall_trace", ""])
+		"wall_dash":
+			# Air-dash into the chimney wall: the cling should give the dash back.
+			plan = [[1, "god", ""], [1, "warp_xy", Vector2(2220, 268)], [3, "press", "move_left"],
+				[5, "press", "jump"], [8, "tap", "dash"], [15, "release", "jump"], [40, "quit", ""]]
+			for f in [7, 10, 14, 18, 24, 30]:
+				plan.append([f, "wall_trace", ""])
 		"win":
 			plan = [[1, "god", ""], [5, "press", "move_right"], [260, "kill_boss", ""],
 				[300, "shot", "1_portal_open"], [600, "shot", "2_won"], [620, "quit", ""]]
@@ -178,6 +197,11 @@ func _physics_process(_delta: float) -> void:
 					_frame, Game.State.keys()[Game.state], p.position.x if p else -1, Rewind.time_ms, Game.shade, shades])
 			"set_hp":
 				get_tree().get_first_node_in_group("player").hp = step[2]
+			"wall_trace":
+				var p: Player = get_tree().get_first_node_in_group("player")
+				print("[wall] frame=%d pos=(%.0f,%.0f) vy=%.0f sliding=%s wall_t=%.2f dir=%d time=%d air_dash_used=%s" % [
+					_frame, p.position.x, p.position.y, p.velocity.y, p.wall_sliding, p.wall_t, p.wall_dir,
+					Rewind.time_ms, p.air_dash_used])
 			"warp_xy":
 				get_tree().get_first_node_in_group("player").position = step[2]
 			"warp":

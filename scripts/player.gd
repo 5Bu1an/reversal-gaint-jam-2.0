@@ -1,7 +1,8 @@
 class_name Player
 extends CharacterBody2D
 ## Hollow Knight-style controller: run, variable jump, dash, directional slash
-## and pogo off enemies with a down-slash. Hold attack to charge an echo slash
+## and pogo off enemies with a down-slash. Hold toward a wall in the air to
+## cling and slide; jump to kick off it (Mantis Claw). Hold attack to charge an echo slash
 ## (nail art): its echo strikes the same spot again a moment later as a ghost
 ## hit, so it can hurt inverted enemies. Spikes cost 1 HP and put you back
 ## on the last safe ground you stood on. Drawn as placeholder shapes until
@@ -35,6 +36,12 @@ const CHARGE_TIME := 0.6
 const CHARGE_GLOW_FROM := 0.15
 const ECHO_DELAY := 0.5
 const ECHO_FLASH := 0.12
+const WALL_SLIDE_SPEED := 60.0
+const WALL_JUMP_X := 190.0
+## Push away from the wall this long before input steers again.
+const WALL_JUMP_LOCK := 0.16
+## Grace window to wall-jump just after letting go of a wall.
+const WALL_COYOTE := 0.1
 
 const COLOR_BODY := Color("#ff2a6d")
 const COLOR_VISOR := Color("#05d9e8")
@@ -64,6 +71,11 @@ var charge_t := 0.0
 ## Pending echo strikes: {rect, dir, id, t}; t counts down to the hit, then
 ## below zero for the flash.
 var echoes: Array[Dictionary] = []
+var wall_t := 0.0
+## Which way a wall jump pushes: +1 when the wall is on your left.
+var wall_dir := 0
+var wall_lock_t := 0.0
+var wall_sliding := false
 
 ## Damage rects in world space, set by the level.
 var hazards: Array[Rect2] = []
@@ -129,11 +141,35 @@ func _physics_process(delta: float) -> void:
 		velocity.y = minf(velocity.y + GRAVITY * delta, MAX_FALL)
 		charge_t = 0.0
 	else:
-		if input_x != 0.0:
-			facing = int(signf(input_x))
-		velocity.x = input_x * RUN_SPEED
+		var wall_x := get_wall_normal().x if is_on_wall_only() else 0.0
+		wall_sliding = not is_on_floor() and wall_x != 0.0 and input_x != 0.0 and signf(input_x) == -signf(wall_x)
+		if wall_sliding:
+			wall_t = WALL_COYOTE
+			wall_dir = int(signf(wall_x))
+			air_dash_used = false
+		if wall_lock_t > 0.0:
+			velocity.x = wall_dir * WALL_JUMP_X
+		else:
+			if input_x != 0.0:
+				facing = int(signf(input_x))
+			velocity.x = input_x * RUN_SPEED
 		velocity.y = minf(velocity.y + GRAVITY * delta, MAX_FALL)
-		if buffer_t > 0.0 and coyote_t > 0.0:
+		if wall_sliding:
+			# Face away from the wall so slashes hit what's in front of you.
+			facing = wall_dir
+			velocity.y = minf(velocity.y, WALL_SLIDE_SPEED)
+			if Engine.get_physics_frames() % 8 == 0:
+				Fx.dust(position + Vector2(-wall_dir * SIZE.x / 2, 0), 2)
+		if buffer_t > 0.0 and coyote_t <= 0.0 and wall_t > 0.0:
+			velocity = Vector2(wall_dir * WALL_JUMP_X, JUMP_VELOCITY)
+			facing = wall_dir
+			wall_lock_t = WALL_JUMP_LOCK
+			wall_t = 0.0
+			buffer_t = 0.0
+			squash = Vector2(0.75, 1.3)
+			Fx.dust(position + Vector2(-wall_dir * SIZE.x / 2, 0))
+			Sfx.play("jump")
+		elif buffer_t > 0.0 and coyote_t > 0.0:
 			velocity.y = JUMP_VELOCITY
 			buffer_t = 0.0
 			coyote_t = 0.0
@@ -185,6 +221,8 @@ func _tick_timers(delta: float) -> void:
 	attack_cd = maxf(attack_cd - delta, 0.0)
 	invuln_t = maxf(invuln_t - delta, 0.0)
 	hurt_t = maxf(hurt_t - delta, 0.0)
+	wall_t = maxf(wall_t - delta, 0.0)
+	wall_lock_t = maxf(wall_lock_t - delta, 0.0)
 
 
 func _start_attack() -> void:
@@ -377,6 +415,7 @@ func capture_state() -> Dictionary:
 		"attack_t": attack_t, "attack_cd": attack_cd, "attack_dir": attack_dir, "attack_id": attack_id,
 		"invuln_t": invuln_t, "hurt_t": hurt_t, "coyote_t": coyote_t,
 		"safe_pos": safe_pos, "respawn_t": respawn_t, "charge_t": charge_t, "echoes": echoes.duplicate(true),
+		"wall_t": wall_t, "wall_dir": wall_dir, "wall_lock_t": wall_lock_t,
 	}
 
 
