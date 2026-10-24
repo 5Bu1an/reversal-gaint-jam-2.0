@@ -33,6 +33,9 @@ func _ready() -> void:
 	_reset_stats()
 	# Rewind is the next autoload, so it isn't in the tree yet.
 	_connect_rewind.call_deferred()
+	# Dev: launch with -- --ending to watch the ending chain without the boss.
+	if "--ending" in OS.get_cmdline_user_args():
+		play_ending.call_deferred()
 
 
 func _connect_rewind() -> void:
@@ -57,14 +60,12 @@ func _process(_delta: float) -> void:
 	if Input.is_action_just_pressed("ui_cancel"):
 		if state == State.PLAYING:
 			set_paused(true)
-		elif state == State.PAUSED:
-			set_paused(false)
 	elif Input.is_action_just_pressed("jump"):
 		# While down you can still rewind, or give up and reboot.
 		if state == State.GAME_OVER or state == State.DOWN:
 			restart()
 		elif state == State.WON:
-			new_game()
+			play_ending()
 
 
 func set_state(new_state: State) -> void:
@@ -78,7 +79,14 @@ func set_state(new_state: State) -> void:
 	state_changed.emit(state)
 
 
+## Process frame the game was last paused on, so the Esc press that opened
+## the pause menu doesn't also close it.
+var paused_frame := -1
+
+
 func set_paused(paused: bool) -> void:
+	if paused:
+		paused_frame = Engine.get_process_frames()
 	get_tree().paused = paused
 	set_state(State.PAUSED if paused else State.PLAYING)
 
@@ -113,7 +121,31 @@ func restart() -> void:
 
 
 func new_game() -> void:
+	reset_run()
+	restart()
+
+
+## After the win screen: the ending hologram, the reverse card, the studio
+## animation, then the title.
+func play_ending() -> void:
+	get_tree().paused = false
+	Engine.time_scale = 1.0
+	reset_run()
+	set_state(State.TITLE)
+	StoryIntro.ending = true
+	get_tree().change_scene_to_file("res://scenes/story_intro.tscn")
+
+
+## Forget the checkpoint, shade and stats, e.g. when starting from the title.
+func reset_run() -> void:
 	checkpoint = 0
 	shade = {}
 	_reset_stats()
-	restart()
+
+
+## Leave the run for the title screen (from the pause menu).
+func quit_to_title() -> void:
+	get_tree().paused = false
+	Engine.time_scale = 1.0
+	reset_run()
+	get_tree().change_scene_to_file("res://scenes/title.tscn")

@@ -50,10 +50,10 @@ const SHARDS: Array[Vector2] = [
 
 ## Inscriptions: position, then lines. They only show when you stand close.
 const HINTS := [
-	[Vector2(110, 236), ["Hold E to turn time back.", "What you undo keeps moving, as a ghost."]],
+	[Vector2(110, 236), ["Hold E or L to turn time back.", "What you undo keeps moving, as a ghost."]],
 	[Vector2(390, 236), ["Hold the slash and let go, or press Q: an echo of the cut strikes again, as a ghost would.",
 		"Charged, dash to lunge. Charged, aim up or down to spin."]],
-	[Vector2(580, 236), ["Some here move backwards through time.", "Your blade glances off them. Your ghost's does not."]],
+	[Vector2(580, 236), ["Purple ones move backwards through time.", "Your ghost's slashes cut them twice as deep."]],
 	[Vector2(990, 160), ["Strike at what lies below you in the air", "to spring off it."]],
 	[Vector2(1210, 236), ["Raise your guard just as a blow lands, and you turn it back.", "Even the Shogun's quakes."]],
 	[Vector2(2110, 236), ["Cling to a wall by holding toward it.", "Something waits at the top of the shaft."]],
@@ -75,6 +75,9 @@ const PORTAL := Rect2(3130, 276, 30, 52)
 ## or attacked; a tap of rewind used to leave a still "shadow" next to you.
 const MIN_GHOST_FRAMES := 20
 const MIN_GHOST_TRAVEL := 16.0
+## The ghost replays at most this much of what you undid (2 s), so it never
+## lingers long after a big rewind.
+const MAX_GHOST_FRAMES := 120
 ## Close-up framing like Hollow Knight: 1.5x shows 427x240 of the world, so
 ## the camera also follows you up and down within the level's height.
 const CAMERA_ZOOM := 1.5
@@ -180,6 +183,7 @@ func _ready() -> void:
 	hud_layer.layer = 20
 	hud_layer.process_mode = Node.PROCESS_MODE_ALWAYS
 	hud_layer.add_child(preload("res://scripts/hud.gd").new())
+	add_child(preload("res://scripts/ui/pause_menu.gd").new())
 	add_child(hud_layer)
 
 	var fx_layer := CanvasLayer.new()
@@ -216,7 +220,7 @@ func _physics_process(delta: float) -> void:
 	if player.position.x >= CHECKPOINT_X:
 		Game.reach_checkpoint(1)
 	_update_portal()
-	if boss.dead and not Rewind.is_rewinding and PORTAL.has_point(player.position):
+	if boss.defeated() and not Rewind.is_rewinding and PORTAL.has_point(player.position):
 		Game.win()
 
 
@@ -233,7 +237,7 @@ func _update_portal() -> void:
 		_portal.scale = Vector2(0.9, 0.9)
 		add_child(_portal)
 		_portal.play("play")
-	_portal.visible = boss.dead
+	_portal.visible = boss.defeated()
 
 
 func _grunt(pos: Vector2) -> Enemy:
@@ -274,6 +278,7 @@ func _on_rewind_ended(undone_frames: Array) -> void:
 			path.append(frame[player])
 	if path.size() < MIN_GHOST_FRAMES:
 		return
+	path = path.slice(0, MAX_GHOST_FRAMES)
 	var attacked := path.any(func(f: Dictionary) -> bool: return f.attack_t > 0.0)
 	var travel: float = path[0].position.distance_to(path[-1].position)
 	if not attacked and travel < MIN_GHOST_TRAVEL:
@@ -353,7 +358,7 @@ func _draw() -> void:
 	for thorn: Array in THORNS:
 		_draw_thorns(thorn[0], thorn[1])
 	_draw_shrine()
-	if boss.dead:
+	if boss.defeated():
 		var pulse := 0.6 + 0.4 * sin(Time.get_ticks_msec() / 150.0)
 		draw_rect(PORTAL, Color(COLOR_EDGE, 0.3 * pulse))
 		draw_rect(PORTAL, COLOR_EDGE, false, 2.0)

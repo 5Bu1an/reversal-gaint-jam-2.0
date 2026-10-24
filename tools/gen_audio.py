@@ -185,6 +185,115 @@ def effects():
     save("rewind_loop", lowpass(whir, 1800), peak=0.6)
 
 
+# ---------- voice: a tiny formant synthesizer for the samurai ----------
+
+# Male vowel formants (Hz) and their relative strengths.
+VOWELS = {
+    "a": ((730, 1.0), (1090, 0.5), (2440, 0.25)),
+    "i": ((270, 1.0), (2290, 0.35), (3010, 0.2)),
+    "u": ((300, 1.0), (870, 0.4), (2240, 0.15)),
+    "e": ((530, 1.0), (1840, 0.45), (2480, 0.2)),
+    "o": ((570, 1.0), (840, 0.55), (2410, 0.15)),
+    "n": ((260, 1.0), (1900, 0.08), (2600, 0.05)),
+}
+
+
+def resonate(samples, freq, bandwidth):
+    """Two-pole resonator (one formant)."""
+    r = math.exp(-math.pi * bandwidth / SR)
+    c = 2 * r * math.cos(2 * math.pi * freq / SR)
+    out, y1, y2 = [], 0.0, 0.0
+    for x in samples:
+        y = x + c * y1 - r * r * y2
+        out.append(y)
+        y2, y1 = y1, y
+    return out
+
+
+def speak(segments, f0, breath=0.05, rough=0.0, muffle=None):
+    """segments: list of (vowel, seconds, amp) glided between; f0(t) pitch.
+    A glottal pulse train through blended vowel formants, plus breath."""
+    total = sum(seg[1] for seg in segments)
+    n = int(total * SR)
+    source, phase = [], 0.0
+    for i in range(n):
+        t = i / SR
+        f = f0(t) * (1 + rng.uniform(-0.01, 0.01))
+        phase += f / SR
+        p = phase % 1.0
+        pulse = (1 - p) ** 3 - 0.25  # buzzy glottal-ish wave
+        if rough:
+            pulse *= 1 + rough * math.sin(2 * math.pi * f * 0.5 * t)  # growl subharmonic
+        source.append(pulse + rng.uniform(-1, 1) * breath)
+    # Per-sample formant targets, crossfading between segments.
+    out = [0.0] * n
+    starts, acc = [], 0.0
+    for seg in segments:
+        starts.append(acc)
+        acc += seg[1]
+    for k in range(3):
+        freqs = []
+        for i in range(n):
+            t = i / SR
+            j = max(idx for idx, st in enumerate(starts) if st <= t)
+            a = VOWELS[segments[j][0]][k][0]
+            b = VOWELS[segments[min(j + 1, len(segments) - 1)][0]][k][0]
+            u = min(1.0, (t - starts[j]) / segments[j][1])
+            freqs.append(a + (b - a) * max(0.0, u - 0.6) / 0.4)
+        # Resonate in blocks so the formant can move.
+        y1 = y2 = 0.0
+        gain = VOWELS[segments[0][0]][k][1]
+        for i in range(n):
+            r = math.exp(-math.pi * (80 + 40 * k) / SR)
+            c = 2 * r * math.cos(2 * math.pi * freqs[i] / SR)
+            y = source[i] + c * y1 - r * r * y2
+            y2, y1 = y1, y
+            out[i] += y * gain * 0.02
+    # Amplitude envelope per segment, smoothed.
+    env = []
+    for i in range(n):
+        t = i / SR
+        j = max(idx for idx, st in enumerate(starts) if st <= t)
+        env.append(segments[j][2])
+    smooth, e = [], 0.0
+    for v in env:
+        e += (v - e) * 0.004
+        smooth.append(e)
+    out = [x * g for x, g in zip(out, smooth)]
+    return lowpass(out, muffle) if muffle else out
+
+
+def voices():
+    save("grunt_wake", speak([("n", 0.25, 0.6), ("n", 0.2, 0.9), ("u", 0.35, 1.0), ("a", 0.3, 0.5), ("a", 0.15, 0.0)],
+                             glide(118, 92, 1.0), breath=0.08, rough=0.35), peak=0.8)
+    save("grunt_breath", mix(noise(0.5, decay=4, attack=0.03, vol=0.35, cutoff=2500),
+                             speak([("a", 0.18, 0.5), ("a", 0.25, 0.3), ("a", 0.1, 0.0)], glide(130, 105, 0.4), breath=0.35)), peak=0.6)
+    save("grunt_hm", speak([("n", 0.12, 0.0), ("n", 0.3, 0.9), ("n", 0.1, 0.0)], glide(100, 150, 0.35, 2.0), breath=0.04), peak=0.7)
+    # Confused murmur: Japanese-like syllables, muffled as if half awake.
+    syllables = []
+    for k in range(14):
+        v = rng.choice("aiueoaoa")
+        syllables.append((v, rng.uniform(0.08, 0.17), rng.uniform(0.5, 1.0)))
+        if rng.random() < 0.25:
+            syllables.append(("n", 0.07, 0.4))
+        if rng.random() < 0.2:
+            syllables.append(("a", 0.12, 0.0))
+    syllables.append(("u", 0.2, 0.0))
+    contour = lambda t: 112 + 14 * math.sin(t * 2.3) - 10 * t
+    save("mumble", speak(syllables, contour, breath=0.06, rough=0.15, muffle=900), peak=0.7)
+
+
+def holo():
+    save("holo_on", mix(
+        voice(0.9, glide(120, 1800, 0.8, 1.6), "sine", decay=2, attack=0.05, vol=0.3),
+        voice(0.9, glide(240, 3600, 0.8, 1.6), "tri", decay=2.5, attack=0.05, vol=0.12),
+        noise(0.9, decay=3, vol=0.18, cutoff=5000, highpass=True)))
+    save("holo_type", voice(0.05, 1500, "sine", decay=45, vol=0.25))
+    save("holo_off", mix(
+        voice(0.6, glide(1600, 80, 0.5), "sine", decay=4, vol=0.3),
+        noise(0.5, decay=6, vol=0.2, cutoff=4000, highpass=True)))
+
+
 # ---------- music: 8-bar A-minor synthwave loop ----------
 
 def music():
@@ -234,4 +343,6 @@ def music():
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     effects()
+    voices()
+    holo()
     music()

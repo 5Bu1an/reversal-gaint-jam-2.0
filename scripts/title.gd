@@ -1,166 +1,241 @@
 extends Node2D
-## Title screen on the painted Edo-cyberpunk city: ornate header and footer,
-## neon TENET logo, plaque-button menu, controls panel, rain and music.
+## Title screen: the generated future-Japan background (tools/gen_menu_bg.py)
+## with parallax, falling sakura and golden motes; the KURO'S TENET logo; a
+## techno menu (start, controls, settings, quit) built on MenuList.
 
 const LEVEL := "res://scenes/main.tscn"
-const COLOR_TIME := Color("#05d9e8")
-const COLOR_HP := Color("#ff2a6d")
-const COLOR_DIM := Color(1, 1, 1, 0.35)
-const COLOR_INK := Color("#0b0b14")
+const STORY := "res://scenes/story_intro.tscn"
 const VIEW := Vector2(640, 360)
-const BUTTON_H := 40.0
-const BUTTON_Y := 204.0
-const BUTTON_STEP := 40.0
+const CYAN := Color("#30e8ff")
+const PINK := Color("#ff3d8b")
+const GOLD := Color("#ffcf5a")
+const INK := Color("#eae6ff")
+const LAYERS := [["sky", 2.0], ["far", 5.0], ["city", 9.0], ["near", 14.0]]
+const MENU_TOP := 190.0
 
 const CONTROLS := [
-	["MOVE", "W  A  S  D"],
-	["JUMP", "SPACE"],
-	["ATTACK", "LEFT CLICK   -   click fast to combo"],
-	["SPECIAL", "Q   or   hold LEFT CLICK"],
-	["DASH", "SHIFT"],
-	["BLOCK", "hold RIGHT CLICK   -   time it to parry"],
-	["REWIND", "hold E"],
+	["MOVE", "A / D     aim  W / S"],
+	["JUMP", "SPACE  or  W     -   again in the air"],
+	["ATTACK", "J  or  LEFT CLICK   -   tap fast to combo"],
+	["SPECIAL", "Q   or   hold attack"],
+	["DASH", "K  or  SHIFT"],
+	["BLOCK", "hold F  or  RIGHT CLICK   -   time it to parry"],
+	["REWIND", "hold L  or  E"],
 	["PAUSE", "ESC"],
 ]
 
-var _items: Array[String] = ["START", "CONTROLS"]
-var _selected := 0
-var _show_controls := false
+enum Screen { MAIN, CONTROLS, SETTINGS }
+
+var _screen := Screen.MAIN
+var _main := MenuList.new()
+var _settings := MenuList.new()
+var _controls_back := MenuList.new()
+var _layers: Array[Sprite2D] = []
 var _starting := false
 var _t := 0.0
 var _rng := RandomNumberGenerator.new()
-var _press_t := 0.0
+var _font: Font
 
 
 func _ready() -> void:
+	_font = ThemeDB.fallback_font
 	if Array(OS.get_cmdline_user_args()).any(func(a: String) -> bool:
 			return a.begins_with("--autopilot=") and a != "--autopilot=title"):
 		get_tree().change_scene_to_file.call_deferred(LEVEL)
 		return
-	if not OS.has_feature("web"):
-		_items.append("QUIT")
-	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	Game.set_state(Game.State.TITLE)
 	Sfx.play_music()
 	Sfx.set_music_volume(-14.0)
 
-	var rain_anchor := Node2D.new()
-	rain_anchor.position = Vector2(VIEW.x / 2, 0)
-	rain_anchor.add_child(preload("res://scripts/scenery/rain.gd").new())
-	add_child(rain_anchor)
+	for layer: Array in LAYERS:
+		var sprite := Sprite2D.new()
+		sprite.texture = load("res://assets/ui/menu/%s.png" % layer[0])
+		sprite.centered = false
+		# Oversize slightly so parallax never reveals an edge.
+		sprite.scale = Vector2.ONE * 1.06
+		sprite.position = -VIEW * 0.03
+		sprite.z_index = -10
+		add_child(sprite)
+		_layers.append(sprite)
+	_add_petals()
+	_add_motes()
 
 	var env := Environment.new()
 	env.background_mode = Environment.BG_CANVAS
 	env.glow_enabled = true
-	env.glow_intensity = 0.8
-	env.glow_hdr_threshold = 0.6
+	env.glow_intensity = 0.7
+	env.glow_hdr_threshold = 0.7
 	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SCREEN
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
 	add_child(world_env)
 
+	var ui := CanvasLayer.new()
+	add_child(ui)
+	var main_items := [{"id": "start", "label": "START"}, {"id": "controls", "label": "CONTROLS"},
+		{"id": "settings", "label": "SETTINGS"}]
+	if not OS.has_feature("web"):
+		main_items.append({"id": "quit", "label": "QUIT"})
+	_main.set_items(main_items)
+	_main.position = Vector2((VIEW.x - _main.row_width) / 2, MENU_TOP)
+	_main.chosen.connect(_on_main)
+	ui.add_child(_main)
 
-func _process(delta: float) -> void:
-	_t += delta
-	_press_t = maxf(_press_t - delta, 0.0)
-	queue_redraw()
+	_settings.row_width = 260.0
+	_settings.gap = 4.0
+	_settings.set_items(Settings.menu_items())
+	_settings.position = Vector2((VIEW.x - _settings.row_width) / 2, 178)
+	_settings.changed.connect(func(id: String, value: Variant) -> void: Settings.set_option(id, value))
+	_settings.chosen.connect(func(_id: String) -> void: _show(Screen.MAIN))
+	_settings.back.connect(func() -> void: _show(Screen.MAIN))
+	ui.add_child(_settings)
+
+	_controls_back.row_width = 120.0
+	_controls_back.set_items([{"id": "back", "label": "BACK"}])
+	_controls_back.position = Vector2((VIEW.x - 120) / 2, 316)
+	_controls_back.chosen.connect(func(_id: String) -> void: _show(Screen.MAIN))
+	_controls_back.back.connect(func() -> void: _show(Screen.MAIN))
+	ui.add_child(_controls_back)
+	_show(Screen.MAIN)
+
+
+func _show(screen: Screen) -> void:
+	_screen = screen
+	_main.visible = screen == Screen.MAIN
+	_settings.visible = screen == Screen.SETTINGS
+	_controls_back.visible = screen == Screen.CONTROLS
+	if screen == Screen.SETTINGS:
+		_settings.selected = 0
+		_settings.set_items(Settings.menu_items())
+
+
+func _on_main(id: String) -> void:
 	if _starting:
 		return
-	if _show_controls:
-		if Input.is_action_just_pressed("jump") or Input.is_action_just_pressed("attack") \
-				or Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("ui_cancel"):
-			_show_controls = false
-			Sfx.play("ui_move")
-		return
-	if Input.is_action_just_pressed("move_up") or Input.is_action_just_pressed("ui_up"):
-		_move(-1)
-	elif Input.is_action_just_pressed("move_down") or Input.is_action_just_pressed("ui_down"):
-		_move(1)
-	elif Input.is_action_just_pressed("jump") or Input.is_action_just_pressed("attack") \
-			or Input.is_action_just_pressed("ui_accept"):
-		_choose()
-
-
-func _move(step: int) -> void:
-	_selected = wrapi(_selected + step, 0, _items.size())
-	Sfx.play("ui_move", -2.0, 0.0)
-
-
-func _choose() -> void:
-	Sfx.play("ui_select", 0.0, 0.0)
-	_press_t = 0.15
-	match _items[_selected]:
-		"START":
+	match id:
+		"start":
 			_starting = true
-			Game.checkpoint = 0
+			Game.reset_run()
 			Fx.flash(Color.WHITE, 0.6)
-			Sfx.set_music_volume(Sfx.MUSIC_DB)
 			await get_tree().create_timer(0.35).timeout
-			get_tree().change_scene_to_file(LEVEL)
-		"CONTROLS":
-			_show_controls = true
-		"QUIT":
+			get_tree().change_scene_to_file(STORY)
+		"controls":
+			_show(Screen.CONTROLS)
+		"settings":
+			_show(Screen.SETTINGS)
+		"quit":
 			get_tree().quit()
 
 
+func _process(delta: float) -> void:
+	_t += delta
+	# Layers drift with the mouse and a slow sway: nearer layers move more.
+	var mouse := (get_viewport().get_mouse_position() / get_viewport().get_visible_rect().size - Vector2(0.5, 0.5)) * 2.0
+	var sway := Vector2(sin(_t * 0.25), cos(_t * 0.2) * 0.5)
+	for i in _layers.size():
+		var depth: float = LAYERS[i][1]
+		_layers[i].position = -VIEW * 0.03 - (mouse.clamp(Vector2(-1, -1), Vector2(1, 1)) + sway * 0.4) * depth
+	queue_redraw()
+
+
+func _add_petals() -> void:
+	var image := Image.create(3, 2, false, Image.FORMAT_RGBA8)
+	image.fill(Color("#ffb3d1"))
+	image.set_pixel(2, 1, Color("#ff7aae"))
+	var petals := CPUParticles2D.new()
+	petals.texture = ImageTexture.create_from_image(image)
+	petals.amount = 70
+	petals.lifetime = 9.0
+	petals.preprocess = 9.0
+	petals.position = Vector2(VIEW.x * 0.6, -10)
+	petals.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+	petals.emission_rect_extents = Vector2(VIEW.x * 0.7, 4)
+	petals.direction = Vector2(-0.6, 1)
+	petals.spread = 20.0
+	petals.gravity = Vector2(-6, 14)
+	petals.initial_velocity_min = 14.0
+	petals.initial_velocity_max = 30.0
+	petals.angular_velocity_min = -120.0
+	petals.angular_velocity_max = 120.0
+	petals.angle_min = 0.0
+	petals.angle_max = 360.0
+	petals.scale_amount_min = 1.0
+	petals.scale_amount_max = 1.8
+	petals.z_index = 1
+	add_child(petals)
+
+
+func _add_motes() -> void:
+	var motes := CPUParticles2D.new()
+	motes.amount = 40
+	motes.lifetime = 6.0
+	motes.preprocess = 6.0
+	motes.position = Vector2(448, 90)
+	motes.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+	motes.emission_rect_extents = Vector2(140, 40)
+	motes.direction = Vector2(0, 1)
+	motes.spread = 30.0
+	motes.gravity = Vector2(0, 4)
+	motes.initial_velocity_min = 4.0
+	motes.initial_velocity_max = 12.0
+	motes.color = Color(GOLD, 0.9)
+	motes.scale_amount_min = 1.0
+	motes.scale_amount_max = 2.0
+	motes.z_index = -5
+	add_child(motes)
+
+
 func _draw() -> void:
-	var font := ThemeDB.fallback_font
-	draw_texture_rect(UiArt.MENU_BACKGROUND, Rect2(Vector2.ZERO, VIEW), false)
-	# Darken toward the centre column so the menu reads over the painting.
-	var shade := Color(0, 0, 0, 0.5)
+	# Darken behind the logo and menu so they read over the scene.
 	var clear := Color(0, 0, 0, 0)
-	draw_rect(Rect2(220, 0, 200, VIEW.y), shade)
+	var shade := Color(0.02, 0.01, 0.05, 0.55)
 	for side: float in [-1.0, 1.0]:
-		var inner := VIEW.x / 2 + side * 100.0
-		var outer := VIEW.x / 2 + side * 230.0
+		var inner := VIEW.x / 2
+		var outer := VIEW.x / 2 + side * 210.0
 		draw_polygon(PackedVector2Array([Vector2(inner, 0), Vector2(outer, 0), Vector2(outer, VIEW.y), Vector2(inner, VIEW.y)]),
 			PackedColorArray([shade, clear, clear, shade]))
-	UiArt.draw_painted(self, UiArt.HEADER, Vector2(VIEW.x / 2, 46), 46.0)
-	_draw_logo(font)
-	if _show_controls:
-		_draw_controls(font)
-	else:
-		_draw_menu(font)
-	draw_string(font, Vector2(16, 16), "GIANT JAM 2  ·  THEME: REVERSAL", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(UiArt.INK, 0.45))
+	_draw_logo()
+	match _screen:
+		Screen.CONTROLS:
+			_draw_controls()
+		Screen.SETTINGS:
+			MenuList.draw_panel(self, Rect2(170, 148, 300, 204), "SETTINGS")
+		_:
+			draw_string(_font, Vector2(0, 350), "W / S or mouse to choose    ENTER / SPACE / CLICK to select",
+				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 8, Color(INK, 0.4))
+	draw_string(_font, Vector2(12, 14), "LIGHTNING & THUNDER  ·  GIANT JAM 2", HORIZONTAL_ALIGNMENT_LEFT, -1, 7, Color(INK, 0.35))
 
 
-func _draw_logo(font: Font) -> void:
-	var size := 52
-	var text := "T E N E T"
-	var y := 132.0
-	var glitch := fmod(_t, 3.1) < 0.12
+func _draw_logo() -> void:
+	var y := 112.0
+	var glitch := fmod(_t, 3.7) < 0.1
 	var jitter := Vector2(_rng.randf_range(-3, 3), 0) if glitch else Vector2.ZERO
-	for spread in [3.0, 2.0]:
-		draw_string(font, Vector2(spread, y), text, HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, size, Color(COLOR_HP, 0.15))
-		draw_string(font, Vector2(-spread, y), text, HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, size, Color(COLOR_TIME, 0.15))
-	draw_string(font, Vector2(2, y) + jitter, text, HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, size, Color(COLOR_HP, 0.8))
-	draw_string(font, Vector2(-2, y) - jitter, text, HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, size, Color(COLOR_TIME, 0.8))
-	draw_string(font, Vector2(0, y), text, HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, size, UiArt.INK)
-	draw_string(font, Vector2(0, y + 22), "EVERY MISTAKE CAN BE UNDONE.  FOR A FEW MILLISECONDS.",
-		HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 9, Color(UiArt.INK, 0.75))
+	# KURO'S: small, gold, spaced, with rules either side.
+	var kuro := "K U R O ' S"
+	draw_string(_font, Vector2(0, y - 46), kuro, HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 16, Color(GOLD, 0.25))
+	draw_string(_font, Vector2(0, y - 47), kuro, HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 16, GOLD)
+	var half := _font.get_string_size(kuro, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x / 2 + 10
+	for side: float in [-1.0, 1.0]:
+		var a := Vector2(VIEW.x / 2 + side * half, y - 52)
+		draw_line(a, a + Vector2(side * 60, 0), Color(GOLD, 0.7), 1.0)
+		draw_colored_polygon(MenuList.diamond(a + Vector2(side * 64, 0), 2.5), GOLD)
+	# TENET: big neon with a split-colour glitch.
+	var text := "T E N E T"
+	var size := 54
+	for spread in [4.0, 2.5]:
+		draw_string(_font, Vector2(spread, y), text, HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, size, Color(PINK, 0.12))
+		draw_string(_font, Vector2(-spread, y), text, HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, size, Color(CYAN, 0.12))
+	draw_string(_font, Vector2(2, y) + jitter, text, HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, size, Color(PINK, 0.85))
+	draw_string(_font, Vector2(-2, y) - jitter, text, HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, size, Color(CYAN, 0.85))
+	draw_string(_font, Vector2(0, y), text, HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, size, INK)
+	draw_string(_font, Vector2(0, y + 24), "EVERY MISTAKE CAN BE UNDONE.  FOR A FEW MILLISECONDS.",
+		HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 8, Color(INK, 0.7))
 
 
-func _draw_menu(font: Font) -> void:
-	for i in _items.size():
-		var center := Vector2(VIEW.x / 2, BUTTON_Y + i * BUTTON_STEP)
-		var chosen := i == _selected
-		var plaque := UiArt.BUTTON
-		if chosen:
-			plaque = UiArt.BUTTON_PRESSED if _press_t > 0.0 else UiArt.BUTTON_HOVER
-		UiArt.draw_painted(self, plaque, center, BUTTON_H)
-		var label := " ".join(_items[i].split(""))
-		var color := Color.WHITE if chosen else Color(UiArt.INK, 0.7)
-		draw_string(font, Vector2(0, center.y + 4), label, HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, color)
-	var bottom := BUTTON_Y + (_items.size() - 1) * BUTTON_STEP
-	UiArt.draw_painted(self, UiArt.FOOTER, Vector2(VIEW.x / 2, bottom + 38), 28.0)
-	draw_string(font, Vector2(0, 352), "W / S to choose   ·   SPACE to select", HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 8, Color(UiArt.INK, 0.45))
-
-
-func _draw_controls(font: Font) -> void:
-	var panel := Rect2(165, 160, 310, 194)
-	draw_texture_rect(UiArt.MODAL, panel, false)
+func _draw_controls() -> void:
+	var panel := Rect2(150, 150, 340, 196)
+	MenuList.draw_panel(self, panel, "CONTROLS")
 	for i in CONTROLS.size():
-		var y := panel.position.y + 38 + i * 16.5
-		draw_string(font, Vector2(panel.position.x + 40, y), CONTROLS[i][0], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, COLOR_TIME)
-		draw_string(font, Vector2(panel.position.x + 112, y), CONTROLS[i][1], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, UiArt.INK)
-	draw_string(font, Vector2(0, panel.end.y - 26), "SPACE to go back", HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 8, Color(UiArt.INK, 0.6))
+		var y := panel.position.y + 46 + i * 16.0
+		draw_string(_font, Vector2(panel.position.x + 30, y), CONTROLS[i][0], HORIZONTAL_ALIGNMENT_LEFT, -1, 9, CYAN)
+		draw_string(_font, Vector2(panel.position.x + 100, y), CONTROLS[i][1], HORIZONTAL_ALIGNMENT_LEFT, -1, 9, INK)

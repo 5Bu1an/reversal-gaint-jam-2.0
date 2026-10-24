@@ -15,11 +15,11 @@ extends Enemy
 enum Mode { STALK, WINDUP_CHARGE, CHARGE, WINDUP_SLAM, AIR, RECOVER, REVERSING }
 
 const NAME := "KURO SHOGUN"
-const CHARGE_SPEED := 300.0
+const CHARGE_SPEED := 330.0
 const CHARGE_TIME := 1.4
 const SLAM_JUMP := -420.0
 const SLAM_DRIFT := 220.0
-const WAVE_SPEED := 210.0
+const WAVE_SPEED := 232.0
 const WAVE_SIZE := Vector2(10, 14)
 const INVERTED_TIME := 3.5
 const NORMAL_TIME := 3.0
@@ -28,7 +28,7 @@ const SNAPS := 12 # 3 s of its own history
 const BURST_SNAPS := 8 # damage counted over the last 2 s
 const BURST_DAMAGE := 4
 const REVERSE_TIME := 1.2
-const REVERSALS := 2
+const REVERSALS := 1
 
 const COLOR_ARMOR := Color("#2a2140")
 const COLOR_TRIM := Color("#ff2a6d")
@@ -51,6 +51,8 @@ var invert_t := 0.0
 ## Its own short history as (x, y, hp), oldest first.
 var snaps: Array[Vector3] = []
 var snap_t := 0.0
+## Set by BossDeath when the finale ends (cosmetic, so not rewound).
+var death_shown := false
 var reversals_left := REVERSALS
 ## Snapshots being played backwards during a reversal, newest first.
 var reverse_path: Array[Vector3] = []
@@ -60,7 +62,7 @@ var reverse_t := 0.0
 func _init() -> void:
 	size = Vector2(44, 80)
 	speed = 55.0
-	max_hp = 24
+	max_hp = 30
 	knockback = 0.0
 
 
@@ -122,12 +124,12 @@ func _act(delta: float) -> void:
 			velocity.x = move_toward(velocity.x, 0.0, 900.0 * delta)
 			if mode_t <= 0.0:
 				mode = Mode.STALK
-				mode_t = 1.4 * pace
+				mode_t = 1.2 * pace
 
 	move_and_slide()
 
 	if mode == Mode.CHARGE and (is_on_wall() or mode_t <= 0.0):
-		_recover(0.7 * pace)
+		_recover(0.6 * pace)
 	elif mode == Mode.AIR and is_on_floor():
 		var floor_y := position.y + size.y / 2
 		waves.append(Vector3(position.x - size.x / 2, floor_y, -1))
@@ -137,7 +139,7 @@ func _act(delta: float) -> void:
 		Fx.shake(2.5)
 		Fx.dust(Vector2(position.x - size.x / 2, floor_y), 6)
 		Fx.dust(Vector2(position.x + size.x / 2, floor_y), 6)
-		_recover(0.6 * pace)
+		_recover(0.5 * pace)
 
 	var wave_speed := WAVE_SPEED / pace
 	for i in range(waves.size() - 1, -1, -1):
@@ -242,12 +244,20 @@ func take_hit(key: String, from_dir: Vector2, damage := 1) -> bool:
 	if dead:
 		waves.clear()
 		reflected.clear()
-		Fx.hit_stop(0.35)
-		Fx.shake(6.0)
-		Fx.burst(position, COLOR_GOLD, 24, 220.0)
-		Fx.kill(position, from_dir, COLOR_GOLD)
-		Fx.enemy_kill(position, from_dir, COLOR_TRIM, size)
 	return landed
+
+
+## The finale: see BossDeath. The portal waits for death_shown.
+func _die(_from_dir: Vector2) -> void:
+	death_shown = false
+	var finale := preload("res://scripts/boss_death.gd").new()
+	finale.setup(self, _art)
+	get_parent().add_child(finale)
+
+
+## True once Kuro is dead and his finale has played out.
+func defeated() -> bool:
+	return dead and death_shown
 
 
 ## The Kuro Shogun: LuizMelo's oni-masked samurai at 1.5x.
@@ -279,11 +289,6 @@ func _sprite_anim() -> String:
 
 func show_health_bar() -> bool:
 	return false
-
-
-func _death_fx(_from_dir: Vector2) -> void:
-	Fx.sprite_fx("warm_explosion", position, 1.6)
-	Fx.sprite_fx("void_implosion", position, 1.2)
 
 
 func _draw_body(body: Color) -> void:

@@ -1,4 +1,4 @@
-# Tenet (working title)
+# Kuro's Tenet
 
 Cyberpunk metroidvania for Giant Jam 2 (theme: **reversal**). Your power is a
 time bar measured in milliseconds: hold rewind and the fight plays backwards,
@@ -15,14 +15,14 @@ fights alongside you.
 
 | Action | Input |
 | --- | --- |
-| Move | W A S D |
-| Jump (hold to go higher, tap for a short hop) | Space |
-| Attack (click again quickly for a 3-hit combo) | Left click: aims at the cursor (above: up, below in the air: pogo, else toward it) |
+| Move | A / D (W / S aim keyboard slashes) |
+| Jump (hold to go higher, tap for a short hop; press again in the air to double jump) | Space or W |
+| Attack (again quickly for a 3-hit combo) | J: aims with W / S and facing. Left click: aims at the cursor (above: up, below in the air: pogo, else toward it) |
 | Special (nail art, no charge needed; 1.2 s cooldown) | Q: Great Slash; aiming up/down: Cyclone Slash; while dashing: Dash Slash |
-| Dash | Shift |
-| Block (hits from the front cost 0.3 s of time instead of health; breaks if you're out of time) | Hold right click |
+| Dash | K or Shift |
+| Block (hits from the front cost 0.3 s of time instead of health; breaks if you're out of time) | Hold F or right click |
 | Time-parry (turn the attack back, +0.6 s, reflect boss shockwaves) | Raise the guard just as a hit lands |
-| Rewind time | Hold E |
+| Rewind time | Hold L or E |
 | Pause | Esc |
 | Wall cling / wall jump | In the air, hold toward a wall; Space to kick off |
 | Reboot after dying (lose your time to a shade) | Space while down |

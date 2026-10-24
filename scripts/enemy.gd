@@ -192,11 +192,11 @@ func take_hit(key: String, from_dir: Vector2, damage := 1) -> bool:
 	if not is_active() or key == last_hit:
 		return false
 	last_hit = key
-	if inverted and not key.begins_with("g"):
-		Fx.impact(position, -from_dir, 0.6, COLOR_INVERTED)
+	# Inverted enemies move backwards through time: your ghost's slashes
+	# (key "g...") hit them twice as hard. Your own still land.
+	if inverted and key.begins_with("g"):
+		damage *= 2
 		Fx.deflect(position, COLOR_INVERTED)
-		Sfx.play("clash")
-		return false
 	hp -= damage
 	hurt_t = HURT_TIME
 	_bar_t = BAR_TIME
@@ -210,14 +210,19 @@ func take_hit(key: String, from_dir: Vector2, damage := 1) -> bool:
 	Fx.enemy_hit(position, from_dir, blood_color(), 1.4 if damage > 1 else 1.0)
 	if hp <= 0:
 		dead = true
-		Sfx.play("kill")
-		Fx.hit_stop(0.08)
-		Fx.enemy_kill(position, from_dir, blood_color(), size, position.y + size.y / 2 if is_on_floor() else -1.0,
-			_art == null)
-		if _art:
-			Fx.sprite_corpse(_art, from_dir)
-		_death_fx(from_dir)
+		_die(from_dir)
 	return true
+
+
+## Death effects. The boss overrides this with its own finale.
+func _die(from_dir: Vector2) -> void:
+	Sfx.play("kill")
+	Fx.hit_stop(0.08)
+	Fx.enemy_kill(position, from_dir, blood_color(), size, position.y + size.y / 2 if is_on_floor() else -1.0,
+		_art == null)
+	if _art:
+		Fx.sprite_corpse(_art, from_dir)
+	_death_fx(from_dir)
 
 
 ## The player turned this attack back (rect is the part of us that touched
