@@ -88,6 +88,8 @@ func _act(delta: float) -> void:
 		var floor_y := position.y + size.y / 2
 		waves.append(Vector3(position.x - size.x / 2, floor_y, -1))
 		waves.append(Vector3(position.x + size.x / 2, floor_y, 1))
+		Sfx.play("boss_slam")
+		Fx.shake(0.5)
 		_recover(0.6 * pace)
 
 	var wave_speed := WAVE_SPEED / pace

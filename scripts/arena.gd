@@ -57,12 +57,14 @@ func _physics_process(_delta: float) -> void:
 				wave = 0
 				_start_wave()
 				_sync_gates()
+				Sfx.play("gate")
 		Phase.FIGHTING:
 			if waves[wave].all(func(e: Enemy) -> bool: return e.dead):
 				wave += 1
 				if wave >= waves.size():
 					phase = Phase.CLEARED
 					_sync_gates()
+					Sfx.play("gate", 0.0, 0.0)
 				else:
 					_start_wave()
 

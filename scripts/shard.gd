@@ -18,6 +18,7 @@ func _physics_process(delta: float) -> void:
 		Rewind.add_time(MS)
 		Fx.sparks(position, COLOR, 16)
 		Fx.flash(COLOR, 0.15)
+		Sfx.play("shard")
 		queue_free()
 
 

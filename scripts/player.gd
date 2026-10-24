@@ -126,12 +126,14 @@ func _physics_process(delta: float) -> void:
 		velocity.y = minf(velocity.y + GRAVITY * delta, MAX_FALL)
 		if buffer_t > 0.0 and coyote_t > 0.0:
 			velocity.y = JUMP_VELOCITY
+			Sfx.play("jump", -4.0)
 			buffer_t = 0.0
 			coyote_t = 0.0
 		if Input.is_action_just_released("jump") and velocity.y < 0.0:
 			velocity.y *= JUMP_CUT
 		if Input.is_action_just_pressed("dash") and dash_cd <= 0.0 and (is_on_floor() or not air_dash_used):
 			dash_t = DASH_TIME
+			Sfx.play("dash", -3.0)
 			dash_cd = DASH_COOLDOWN
 			air_dash_used = not is_on_floor()
 		if Input.is_action_just_pressed("attack") and attack_cd <= 0.0:
@@ -157,6 +159,7 @@ func _tick_timers(delta: float) -> void:
 func _start_attack() -> void:
 	attack_t = ATTACK_TIME
 	attack_cd = ATTACK_COOLDOWN
+	Sfx.play("slash", -4.0, 0.12)
 	attack_id += 1
 	if Input.is_action_pressed("move_up"):
 		attack_dir = Vector2.UP
@@ -178,9 +181,11 @@ func _resolve_attack() -> void:
 			if enemy.dead:
 				Fx.sparks(enemy.position, Color.WHITE, 18)
 				Fx.hit_stop(0.09)
+				Sfx.play("kill")
 				Fx.shake(0.45)
 			else:
 				Fx.hit_stop(0.045)
+				Sfx.play("hit")
 				Fx.shake(0.22)
 			if attack_dir == Vector2.DOWN:
 				velocity.y = POGO_VELOCITY
@@ -214,6 +219,7 @@ func _take_damage(source: Vector2) -> void:
 	Fx.sparks(position, COLOR_BODY, 14)
 	Fx.flash(COLOR_BODY, 0.28)
 	Fx.hit_stop(0.1)
+	Sfx.play("death" if hp <= 0 else "hurt")
 	Fx.shake(0.6)
 	if hp <= 0:
 		dead = true

@@ -64,6 +64,7 @@ var _glitch := ColorRect.new()
 
 func _ready() -> void:
 	Rewind.reset()
+	Sfx.play_music()
 	Game.set_state(Game.State.PLAYING)
 	_build_skyline()
 	for rect in SOLIDS:

@@ -41,6 +41,7 @@ func _physics_process(delta: float) -> void:
 				if enemy.take_hit("g%d_%d" % [_id, frame.attack_id], frame.attack_dir):
 					Fx.sparks(rect.intersection(enemy.hurt_rect()).get_center(), COLOR, 8, frame.attack_dir)
 					Fx.shake(0.15)
+					Sfx.play("hit", -6.0, 0.15)
 	_index += 1
 
 

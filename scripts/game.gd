@@ -7,7 +7,7 @@ extends Node
 ##   Game.boss                                      # Boss node or null; read .hp / .max_hp
 ##   Game.restart() / Game.new_game() / Game.set_paused(bool)
 
-enum State { PLAYING, PAUSED, DOWN, GAME_OVER, WON }
+enum State { PLAYING, PAUSED, DOWN, GAME_OVER, WON, TITLE }
 
 signal state_changed(state: State)
 signal checkpoint_reached(index: int)
@@ -55,6 +55,7 @@ func reach_checkpoint(index: int) -> void:
 
 
 func win() -> void:
+	Sfx.play("win")
 	set_state(State.WON)
 	get_tree().paused = true
 
