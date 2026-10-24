@@ -10,7 +10,8 @@ extends Node
 ## (burst the boss until it rewinds itself; --checkpoint=1), spikes (spike
 ## costs 1 HP and warps you back to safe ground; fatal spike = real death),
 ## shade (die with time left, collect it after the reload; die again first
-## and it's replaced).
+## and it's replaced), echo (charged slash: the swing bounces off an inverted
+## grunt, its echo lands), pogo (down-slash bounce still works).
 
 const PLANS := {
 	"fight": [
@@ -119,6 +120,17 @@ func _make_plan(plan_name: String) -> Array:
 			# Second death is above the spikes: the shade goes to safe ground.
 			plan += [[310, "shade_trace", ""], [315, "warp", 760], [320, "set_hp", 1], [321, "spike_self", ""],
 				[340, "tap", "jump"], [350, "shade_trace", ""], [360, "quit", ""]]
+		"echo":
+			# Timed so the inverted grunt walks into range just as the echo lands.
+			plan = [[1, "god", ""], [1, "warp", 470], [15, "press", "attack"], [55, "shot", "1_charged"],
+				[60, "release", "attack"], [75, "shot", "2_echo_waiting"], [91, "shot", "3_echo_hit"], [120, "quit", ""]]
+			for f in [14, 59, 61, 89, 92, 118]:
+				plan.append([f, "trace", ""])
+		"pogo":
+			plan = [[1, "god", ""], [1, "warp_xy", Vector2(259, 240)], [2, "press", "move_down"],
+				[8, "tap", "attack"], [40, "release", "move_down"], [60, "quit", ""]]
+			for f in range(4, 40, 3):
+				plan.append([f, "trace", ""])
 		"win":
 			plan = [[1, "god", ""], [5, "press", "move_right"], [260, "kill_boss", ""],
 				[300, "shot", "1_portal_open"], [600, "shot", "2_won"], [620, "quit", ""]]
@@ -151,8 +163,9 @@ func _physics_process(_delta: float) -> void:
 				var inverted := get_tree().get_nodes_in_group("enemies").filter(func(e: Enemy) -> bool:
 					return e.inverted and not e.dormant).map(func(e: Enemy) -> String:
 					return "%d@%d" % [e.hp, int(e.position.x)])
-				print("[trace] frame=%d rewinding=%s pos=(%.1f,%.1f) hp=%d dead=%s facing=%d attack_t=%.2f inverted=%s" % [
-					_frame, Rewind.is_rewinding, p.position.x, p.position.y, p.hp, p.dead, p.facing, p.attack_t, inverted])
+				print("[trace] frame=%d rewinding=%s pos=(%.1f,%.1f) vy=%.0f hp=%d dead=%s attack_t=%.2f charge=%.2f echoes=%d inverted=%s" % [
+					_frame, Rewind.is_rewinding, p.position.x, p.position.y, p.velocity.y, p.hp, p.dead, p.attack_t,
+					p.charge_t, p.echoes.size(), inverted])
 			"spike_self":
 				var p: Player = get_tree().get_first_node_in_group("player")
 				p._spike_hit()
@@ -165,6 +178,8 @@ func _physics_process(_delta: float) -> void:
 					_frame, Game.State.keys()[Game.state], p.position.x if p else -1, Rewind.time_ms, Game.shade, shades])
 			"set_hp":
 				get_tree().get_first_node_in_group("player").hp = step[2]
+			"warp_xy":
+				get_tree().get_first_node_in_group("player").position = step[2]
 			"warp":
 				get_tree().get_first_node_in_group("player").position.x = step[2]
 			"face_boss":

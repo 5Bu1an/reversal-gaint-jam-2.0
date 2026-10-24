@@ -40,6 +40,7 @@ const SHARDS: Array[Vector2] = [Vector2(345, 222), Vector2(915, 236), Vector2(16
 ## Tutorial signs: position, then headline and detail lines.
 const HINTS := [
 	[Vector2(150, 150), ["HOLD L TO REWIND TIME", "the timeline you undo keeps fighting as a ghost"]],
+	[Vector2(470, 100), ["OR HOLD J, THEN RELEASE", "echo slash: the echo strikes again, like a ghost"]],
 	[Vector2(470, 150), ["PURPLE = INVERTED", "your blade bounces off - swing, then rewind", "your ghost's swings land"]],
 	[Vector2(650, 150), ["S + J IN THE AIR TO POGO", "bounce off enemies to cross the spikes"]],
 	[Vector2(1230, 150), ["HITS REFILL YOUR TIME", "so do time shards"]],

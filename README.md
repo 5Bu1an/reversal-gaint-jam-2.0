@@ -19,6 +19,7 @@ fights alongside you.
 | Look up / down | W / S or ↑ / ↓ |
 | Jump | Space or Z |
 | Attack | J or X |
+| Echo slash (hits again 0.5 s later, as a ghost) | Hold J or X ~0.6 s, release |
 | Dash | K or C |
 | Rewind (hold) | L or Shift |
 | Reboot after dying (lose your time to a shade) | Jump while down |
