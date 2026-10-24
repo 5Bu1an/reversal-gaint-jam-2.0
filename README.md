@@ -44,6 +44,14 @@ SharedArrayBuffer support is not needed.
 - `scripts/`, `scenes/` — code and scenes (Arjun + Claude)
 - `assets/art/`, `assets/audio/` — art and sound (see [docs/ART_SPEC.md](docs/ART_SPEC.md))
 
+## Sound
+
+`tools/gen_audio.py` synthesizes every sound effect and the music loop into
+`assets/audio/` (`python3 tools/gen_audio.py`). To use a real sound instead,
+drop a `.ogg` or `.wav` with the same name there; `.ogg` wins. Names in use:
+jump, dash, slash, hit, kill, hurt, death, shard, rewind_loop, rewind_end,
+gate, boss_slam, ui_move, ui_select, win, music_level.
+
 ## Scripted playtests
 
 `scripts/dev/autopilot.gd` plays the game from a fixed input plan, prints the
@@ -51,6 +59,7 @@ game state and saves screenshots. It does nothing in a normal run.
 
 ```bash
 godot --path . --fixed-fps 60 -- --autopilot=fight --shots=/absolute/output/dir
+# plans: fight, arena, boss (add --checkpoint=1), win, title
 ```
 
 To avoid merge conflicts, only edit files in your own folders. Pull before you

@@ -113,6 +113,7 @@ func take_hit(key: String, from_dir: Vector2) -> bool:
 	Fx.burst(position, Color.WHITE, 8, 140.0, 50.0, Vector2(from_dir.x, -0.5).normalized() if from_dir.x != 0.0 else from_dir)
 	if hp <= 0:
 		dead = true
+		Sfx.play("kill")
 		Fx.shake(3.0)
 		Fx.burst(position, COLOR_BODY, 20, 180.0)
 	return true

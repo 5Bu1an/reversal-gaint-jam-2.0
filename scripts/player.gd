@@ -71,9 +71,9 @@ var attack_dir := Vector2.RIGHT
 var attack_id := 0
 var invuln_t := 0.0
 var hurt_t := 0.0
+var grounded := true
 ## Cosmetic squash and stretch, eases back to 1.
 var squash := Vector2.ONE
-var _was_on_floor := true
 ## Last floor spot clear of hazards; spikes send you back here.
 var safe_pos := Vector2.ZERO
 var respawn_t := 0.0
@@ -87,6 +87,9 @@ var wall_t := 0.0
 var wall_dir := 0
 var wall_lock_t := 0.0
 var wall_sliding := false
+
+var _sprite := RoninSprite.new()
+var _afterimage_t := 0.0
 
 ## Damage rects in world space, set by the level.
 var hazards: Array[Rect2] = []
@@ -103,19 +106,6 @@ static func attack_rect(origin: Vector2, dir: Vector2) -> Rect2:
 	return Rect2(x, origin.y - 12, 28, 22)
 
 
-static func draw_body(canvas: CanvasItem, f: int, body: Color, visor: Color) -> void:
-	canvas.draw_rect(Rect2(-SIZE / 2, SIZE), body)
-	var visor_x := 0.0 if f > 0 else -6.0
-	canvas.draw_rect(Rect2(visor_x, -8, 6, 3), visor)
-
-
-static func draw_slash(canvas: CanvasItem, origin: Vector2, dir: Vector2, color: Color) -> void:
-	var r := attack_rect(origin, dir)
-	r.position -= origin
-	canvas.draw_rect(r, Color(color, 0.35))
-	canvas.draw_rect(r, color, false, 1.0)
-
-
 func _ready() -> void:
 	add_to_group("rewindable")
 	add_to_group("player")
@@ -125,12 +115,19 @@ func _ready() -> void:
 	shape.shape = RectangleShape2D.new()
 	shape.shape.size = SIZE
 	add_child(shape)
+	add_child(_sprite)
 	safe_pos = position
 
 
 func _physics_process(delta: float) -> void:
-	queue_redraw()
 	squash = squash.move_toward(Vector2.ONE, 4.0 * delta)
+	_sprite.scale = squash
+	_sprite.show_state(capture_state())
+	_sprite.visible = invuln_t <= 0.0 or dead or int(invuln_t * 20.0) % 2 == 0
+	# Fade out at the spikes, fade back in on safe ground.
+	var half := SPIKE_RESPAWN_TIME / 2.0
+	_sprite.modulate.a = absf(respawn_t - half) / half if respawn_t > 0.0 else 1.0
+	queue_redraw()
 	if Rewind.is_rewinding or dead:
 		return
 	_tick_timers(delta)
@@ -221,16 +218,25 @@ func _physics_process(delta: float) -> void:
 
 	var fall_speed := velocity.y
 	move_and_slide()
-	if is_on_floor() and not _was_on_floor and fall_speed > 150.0:
+	if is_on_floor() and not grounded and fall_speed > 150.0:
 		squash = Vector2(1.3, 0.75)
 		Fx.dust(_feet(), 8)
-	_was_on_floor = is_on_floor()
+	grounded = is_on_floor()
+	_dash_trail(delta)
 	if is_on_floor() and hurt_t <= 0.0 and _on_safe_ground():
 		safe_pos = position
 	if attack_t > 0.0:
 		_resolve_attack()
 	_update_echoes(delta)
 	_check_damage()
+
+
+## Afterimages while dashing.
+func _dash_trail(delta: float) -> void:
+	_afterimage_t -= delta
+	if dash_t > 0.0 and _afterimage_t <= 0.0:
+		_afterimage_t = 0.035
+		Fx.afterimage(_sprite)
 
 
 func _tick_timers(delta: float) -> void:
@@ -320,6 +326,8 @@ func _check_damage() -> void:
 
 
 func _take_damage(source: Vector2) -> void:
+	if Game.god_mode:
+		return
 	hp -= 1
 	invuln_t = INVULN_TIME
 	hurt_t = HURT_TIME
@@ -328,7 +336,8 @@ func _take_damage(source: Vector2) -> void:
 	if away == 0.0:
 		away = -facing
 	velocity = Vector2(away * KNOCKBACK.x, KNOCKBACK.y)
-	Sfx.play("hurt")
+	Sfx.play("death" if hp <= 0 else "hurt")
+	Fx.flash(COLOR_BODY, 0.28)
 	Fx.hit_stop(0.12)
 	Fx.shake(6.0)
 	Fx.burst(position, COLOR_BODY, 14, 160.0)
@@ -393,22 +402,8 @@ func _feet() -> Vector2:
 	return position + Vector2(0, SIZE.y / 2)
 
 
+## The sprite draws the body; this layer adds the charge glow and echoes.
 func _draw() -> void:
-	var body := COLOR_BODY
-	if respawn_t > 0.0:
-		# Fade out at the spikes, fade back in on safe ground.
-		var half := SPIKE_RESPAWN_TIME / 2.0
-		body = Color(COLOR_BODY, absf(respawn_t - half) / half)
-	elif dead:
-		body = Color(0.35, 0.35, 0.4)
-	elif invuln_t > 0.0 and int(invuln_t * 20.0) % 2 == 0:
-		body = Color.WHITE
-	# Scale around the feet so squashing doesn't lift the body off the floor.
-	draw_set_transform(Vector2(0, SIZE.y / 2 * (1.0 - squash.y)), 0.0, squash)
-	draw_body(self, facing, body, COLOR_VISOR)
-	draw_set_transform(Vector2.ZERO)
-	if attack_t > 0.0:
-		draw_slash(self, position, attack_dir, COLOR_VISOR)
 	_draw_charge()
 	_draw_echoes()
 
@@ -439,7 +434,7 @@ func capture_state() -> Dictionary:
 		"position": position, "velocity": velocity, "facing": facing, "hp": hp, "dead": dead,
 		"dash_t": dash_t, "dash_cd": dash_cd, "air_dash_used": air_dash_used,
 		"attack_t": attack_t, "attack_cd": attack_cd, "attack_dir": attack_dir, "attack_id": attack_id,
-		"invuln_t": invuln_t, "hurt_t": hurt_t, "coyote_t": coyote_t,
+		"invuln_t": invuln_t, "hurt_t": hurt_t, "coyote_t": coyote_t, "grounded": grounded,
 		"safe_pos": safe_pos, "respawn_t": respawn_t, "charge_t": charge_t, "echoes": echoes.duplicate(true),
 		"wall_t": wall_t, "wall_dir": wall_dir, "wall_lock_t": wall_lock_t,
 		"jump_hold_t": jump_hold_t, "recoil_t": recoil_t, "recoil_dir": recoil_dir,

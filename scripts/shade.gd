@@ -12,6 +12,7 @@ const BOB := 3.0
 
 var ms := 0.0
 var _t := 0.0
+var _sprite := RoninSprite.new()
 
 
 func _init() -> void:
@@ -23,10 +24,14 @@ func _init() -> void:
 func _ready() -> void:
 	super()
 	remove_from_group("rewindable")
+	_sprite.modulate = Color(1.0, 0.35, 0.35)
+	_sprite.flip_h = true
+	add_child(_sprite)
 
 
 func _act(delta: float) -> void:
 	_t += delta
+	_sprite.position.y = Player.SIZE.y / 2 + sin(_t * 2.0) * BOB
 
 
 func damage_rects() -> Array[Rect2]:
@@ -44,16 +49,14 @@ func take_hit(key: String, _from_dir: Vector2) -> bool:
 	Game.shade = {}
 	Fx.burst(position, Ghost.COLOR, 30, 180.0)
 	Fx.shake(4.0)
-	Sfx.play("pickup")
+	Sfx.play("shard")
 	return false
 
 
 func _draw() -> void:
+	_sprite.visible = not dead
 	if dead:
 		return
-	var y := sin(_t * 2.0) * BOB
-	draw_set_transform(Vector2(0, y))
 	modulate.a = 0.55 + 0.15 * sin(_t * 5.0)
-	Player.draw_body(self, -1, Ghost.COLOR, Color.WHITE)
 	draw_string(ThemeDB.fallback_font, Vector2(-40, -24), "%d ms" % ms,
 		HORIZONTAL_ALIGNMENT_CENTER, 80, 8, Ghost.COLOR)

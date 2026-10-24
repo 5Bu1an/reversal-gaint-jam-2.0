@@ -12,6 +12,7 @@ var _frames: Array[Dictionary] = []
 var _index := 0
 var _id := 0
 var _fade := FADE_TIME
+var _sprite := RoninSprite.new()
 
 
 func setup(frames: Array[Dictionary]) -> void:
@@ -19,11 +20,12 @@ func setup(frames: Array[Dictionary]) -> void:
 	_serial += 1
 	_id = _serial
 	modulate = Color(1, 1, 1, 0.6)
+	_sprite.modulate = Color(1.0, 0.35, 0.35)
+	add_child(_sprite)
 	_show_frame(0)
 
 
 func _physics_process(delta: float) -> void:
-	queue_redraw()
 	if Rewind.is_rewinding:
 		return
 	if _index >= _frames.size():
@@ -43,13 +45,8 @@ func _physics_process(delta: float) -> void:
 
 
 func _show_frame(i: int) -> void:
-	position = _frames[mini(i, _frames.size() - 1)].position
+	var frame := _frames[mini(i, _frames.size() - 1)]
+	position = frame.position
+	_sprite.show_state(frame)
 
 
-func _draw() -> void:
-	if _frames.is_empty():
-		return
-	var frame := _frames[mini(_index, _frames.size() - 1)]
-	Player.draw_body(self, frame.facing, COLOR, Color.WHITE)
-	if frame.attack_t > 0.0:
-		Player.draw_slash(self, frame.position, frame.attack_dir, COLOR)
