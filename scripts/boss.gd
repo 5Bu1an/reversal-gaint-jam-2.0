@@ -8,6 +8,9 @@ extends Enemy
 ## It bends time too: take too much damage too fast and it rewinds itself to
 ## where (and how healthy) it was a few seconds ago. It's inverted while it
 ## does, so only a ghost hit can interrupt it. Twice per fight.
+##
+## Parrying its charge stops it dead; parrying a shockwave sends it back the
+## other way, and when it reaches the boss it lands as a ghost hit.
 
 enum Mode { STALK, WINDUP_CHARGE, CHARGE, WINDUP_SLAM, AIR, RECOVER, REVERSING }
 
@@ -40,6 +43,9 @@ var mode_t := 1.0
 var attacks := 0
 ## Live shockwaves as (x, floor_y, dir).
 var waves: Array[Vector3] = []
+## Parried shockwaves heading back at the boss, same layout.
+var reflected: Array[Vector3] = []
+var reflect_id := 0
 ## Counts down to the next inverted/normal flip once enraged.
 var invert_t := 0.0
 ## Its own short history as (x, y, hp), oldest first.
@@ -52,7 +58,7 @@ var reverse_t := 0.0
 
 
 func _init() -> void:
-	size = Vector2(30, 44)
+	size = Vector2(42, 60)
 	speed = 55.0
 	max_hp = 24
 	knockback = 0.0
@@ -81,7 +87,6 @@ func _act(delta: float) -> void:
 			inverted = not inverted
 			invert_t = INVERTED_TIME if inverted else NORMAL_TIME
 			hurt_t = HURT_TIME # flash on every flip
-			Fx.shake(3.0)
 	var player: Player = get_tree().get_first_node_in_group("player")
 	var to_player := 0
 	if player:
@@ -95,6 +100,7 @@ func _act(delta: float) -> void:
 			if mode_t <= 0.0:
 				attacks += 1
 				mode = Mode.WINDUP_CHARGE if attacks % 2 == 1 else Mode.WINDUP_SLAM
+				Fx.telegraph(position + Vector2(dir * size.x * 0.25, -size.y * 0.3), 18.0)
 				mode_t = 0.55 * pace
 		Mode.WINDUP_CHARGE:
 			velocity.x = 0.0
@@ -127,9 +133,10 @@ func _act(delta: float) -> void:
 		waves.append(Vector3(position.x - size.x / 2, floor_y, -1))
 		waves.append(Vector3(position.x + size.x / 2, floor_y, 1))
 		Sfx.play("boss_slam")
-		Fx.shake(5.0)
-		Fx.dust(Vector2(position.x - size.x / 2, floor_y), 10)
-		Fx.dust(Vector2(position.x + size.x / 2, floor_y), 10)
+		Fx.ground_crack(Vector2(position.x, floor_y - 2.0), COLOR_TRIM)
+		Fx.shake(2.5)
+		Fx.dust(Vector2(position.x - size.x / 2, floor_y), 6)
+		Fx.dust(Vector2(position.x + size.x / 2, floor_y), 6)
 		_recover(0.6 * pace)
 
 	var wave_speed := WAVE_SPEED / pace
@@ -139,6 +146,38 @@ func _act(delta: float) -> void:
 		waves[i] = w
 		if w.x < arena_left or w.x > arena_right:
 			waves.remove_at(i)
+	for i in range(reflected.size() - 1, -1, -1):
+		var w := reflected[i]
+		w.x += w.z * wave_speed * delta
+		reflected[i] = w
+		if _wave_rect(w).intersects(hurt_rect()):
+			reflected.remove_at(i)
+			reflect_id += 1
+			take_hit("g_reflect%d" % reflect_id, Vector2(w.z, 0))
+		elif w.x < arena_left or w.x > arena_right:
+			reflected.remove_at(i)
+
+
+func _wave_rect(w: Vector3) -> Rect2:
+	return Rect2(w.x - WAVE_SIZE.x / 2, w.y - WAVE_SIZE.y, WAVE_SIZE.x, WAVE_SIZE.y)
+
+
+func blood_color() -> Color:
+	return COLOR_INVERTED if inverted else COLOR_TRIM
+
+
+func parried(rect: Rect2, _from: Vector2) -> void:
+	for i in waves.size():
+		if _wave_rect(waves[i]) == rect:
+			var w := waves[i]
+			waves.remove_at(i)
+			reflected.append(Vector3(w.x, w.y, -w.z))
+			return
+	# The body: a parried charge stops dead.
+	hurt_t = HURT_TIME
+	velocity.x = 0.0
+	if mode == Mode.CHARGE:
+		_recover(0.8)
 
 
 func _start_reversal() -> void:
@@ -151,8 +190,8 @@ func _start_reversal() -> void:
 	inverted = true
 	waves.clear()
 	velocity = Vector2.ZERO
-	Fx.shake(6.0)
-	Fx.burst(position, COLOR_INVERTED, 24, 200.0)
+	Fx.shake(3.0)
+	Fx.burst(position, COLOR_INVERTED, 12, 160.0)
 	Sfx.play("boss_rewind")
 
 
@@ -180,17 +219,20 @@ func _recover(time: float) -> void:
 	mode_t = time
 
 
+## Its body hurts while it charges or leaps; shockwaves always do.
 func damage_rects() -> Array[Rect2]:
 	if not is_active():
 		return []
-	var rects: Array[Rect2] = [hurt_rect()]
+	var rects: Array[Rect2] = []
+	if mode == Mode.CHARGE or mode == Mode.AIR:
+		rects.append(hurt_rect())
 	for w in waves:
-		rects.append(Rect2(w.x - WAVE_SIZE.x / 2, w.y - WAVE_SIZE.y, WAVE_SIZE.x, WAVE_SIZE.y))
+		rects.append(_wave_rect(w))
 	return rects
 
 
-func take_hit(key: String, from_dir: Vector2) -> bool:
-	var landed := super(key, from_dir)
+func take_hit(key: String, from_dir: Vector2, damage := 1) -> bool:
+	var landed := super(key, from_dir, damage)
 	if landed and mode == Mode.REVERSING:
 		# A ghost hit knocks it out of the reversal where it stands.
 		_end_reversal()
@@ -199,9 +241,12 @@ func take_hit(key: String, from_dir: Vector2) -> bool:
 		_start_reversal()
 	if dead:
 		waves.clear()
+		reflected.clear()
 		Fx.hit_stop(0.35)
-		Fx.shake(10.0)
-		Fx.burst(position, COLOR_GOLD, 40, 260.0)
+		Fx.shake(6.0)
+		Fx.burst(position, COLOR_GOLD, 24, 220.0)
+		Fx.kill(position, from_dir, COLOR_GOLD)
+		Fx.enemy_kill(position, from_dir, COLOR_TRIM, size)
 	return landed
 
 
@@ -218,11 +263,6 @@ func _draw_body(body: Color) -> void:
 	draw_colored_polygon(PackedVector2Array([
 		Vector2(half.x, -half.y), Vector2(half.x + 8, -half.y - 12), Vector2(half.x - 6, -half.y),
 	]), COLOR_GOLD)
-	if mode == Mode.REVERSING:
-		# Afterimages along the path it's about to rewind through.
-		for j in range(reverse_path.size() - 1, -1, -3):
-			var ghost_pos := Vector2(reverse_path[j].x, reverse_path[j].y) - position
-			draw_rect(Rect2(ghost_pos - half, size), Color(COLOR_INVERTED, 0.25), false, 1.0)
 	var winding := mode == Mode.WINDUP_CHARGE or mode == Mode.WINDUP_SLAM
 	var visor := Color.WHITE if winding and int(mode_t * 20.0) % 2 == 0 else trim
 	var visor_x := 0.0 if dir > 0 else -half.x
@@ -230,12 +270,44 @@ func _draw_body(body: Color) -> void:
 	if mode == Mode.CHARGE:
 		draw_line(Vector2(-dir * half.x, -6), Vector2(-dir * (half.x + 18), -6), COLOR_TRIM, 2.0)
 		draw_line(Vector2(-dir * half.x, 8), Vector2(-dir * (half.x + 12), 8), COLOR_TRIM, 2.0)
-	for w in waves:
+
+
+## Crouches and leans back for wind-ups, leans into the charge, stretches up
+## out of a leap and slams flat on landing.
+func _pose() -> Array:
+	match mode:
+		Mode.STALK:
+			return [Vector2(0, -absf(sin(_anim_t * 7.0)) * 1.5), 0.0, Vector2.ONE]
+		Mode.WINDUP_CHARGE, Mode.WINDUP_SLAM:
+			var k := 1.0 - clampf(mode_t / 0.55, 0.0, 1.0)
+			return [Vector2.ZERO, -dir * 0.12 * k, Vector2(1.0 + 0.18 * k, 1.0 - 0.18 * k)]
+		Mode.CHARGE:
+			return [Vector2.ZERO, dir * 0.1, Vector2(1.12, 0.92)]
+		Mode.AIR:
+			return [Vector2.ZERO, 0.0, Vector2(0.85, 1.2) if velocity.y < 0.0 else Vector2(1.05, 0.95)]
+		Mode.RECOVER:
+			var k := clampf(mode_t / 0.6, 0.0, 1.0)
+			return [Vector2.ZERO, 0.0, Vector2(1.0 + 0.15 * k, 1.0 - 0.15 * k)]
+	return [Vector2.ZERO, 0.0, Vector2.ONE]
+
+
+## Shockwaves and rewind afterimages live in the world, so they don't lean
+## and stretch with the body.
+func _draw_extra() -> void:
+	var half := size / 2
+	if mode == Mode.REVERSING:
+		# Afterimages along the path it's about to rewind through.
+		for j in range(reverse_path.size() - 1, -1, -3):
+			var ghost_pos := Vector2(reverse_path[j].x, reverse_path[j].y) - position
+			draw_rect(Rect2(ghost_pos - half, size), Color(COLOR_INVERTED, 0.25), false, 1.0)
+	for i in waves.size() + reflected.size():
+		var is_reflected := i >= waves.size()
+		var w: Vector3 = reflected[i - waves.size()] if is_reflected else waves[i]
 		var base := Vector2(w.x, w.y) - position
 		draw_colored_polygon(PackedVector2Array([
 			base + Vector2(-WAVE_SIZE.x / 2, 0), base + Vector2(0, -WAVE_SIZE.y),
 			base + Vector2(WAVE_SIZE.x / 2, 0),
-		]), COLOR_TRIM)
+		]), Ghost.COLOR if is_reflected else COLOR_TRIM)
 
 
 func capture_state() -> Dictionary:
@@ -244,6 +316,7 @@ func capture_state() -> Dictionary:
 		"mode": mode, "mode_t": mode_t, "attacks": attacks, "waves": waves.duplicate(), "invert_t": invert_t,
 		"snaps": snaps.duplicate(), "snap_t": snap_t, "reversals_left": reversals_left,
 		"reverse_path": reverse_path.duplicate(), "reverse_t": reverse_t,
+		"reflected": reflected.duplicate(), "reflect_id": reflect_id,
 	})
 	return state
 
@@ -254,3 +327,4 @@ func apply_state(state: Dictionary) -> void:
 	waves = state.waves.duplicate()
 	snaps = state.snaps.duplicate()
 	reverse_path = state.reverse_path.duplicate()
+	reflected = state.reflected.duplicate()

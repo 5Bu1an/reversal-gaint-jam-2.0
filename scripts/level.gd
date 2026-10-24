@@ -41,25 +41,23 @@ const SOLIDS: Array[Rect2] = [
 ]
 ## Thorns: rect, then the way the teeth point (DOWN/UP/LEFT/RIGHT). Ceilings
 ## and walls only, never strips on the floor.
-const THORNS := [
-	[Rect2(700, 252, 220, 8), Vector2.DOWN], # tunnel ceiling: full jumps hit it
-	[Rect2(1180, 86, 80, 8), Vector2.DOWN],
-]
+## None placed for now; the hazard and spike-respawn code still supports them.
+const THORNS := []
 const SHARDS: Array[Vector2] = [
 	Vector2(285, 232), Vector2(1062, 222), Vector2(1600, 272), Vector2(2390, 280),
 	Vector2(2220, 46), # top of the shrine chimney
 ]
 
-## Tutorial signs: position, then headline and detail lines.
+## Inscriptions: position, then lines. They only show when you stand close.
 const HINTS := [
-	[Vector2(110, 110), ["HOLD L TO REWIND TIME", "the timeline you undo keeps fighting as a ghost"]],
-	[Vector2(470, 100), ["OR HOLD J, THEN RELEASE", "echo slash: the echo strikes again, like a ghost"]],
-	[Vector2(470, 150), ["PURPLE = INVERTED", "your blade bounces off - swing, then rewind", "your ghost's swings land"]],
-	[Vector2(640, 196), ["THORNS ABOVE", "tap jump for a short hop"]],
-	[Vector2(990, 100), ["S + J IN THE AIR TO POGO", "bounce off drones to stay up"]],
-	[Vector2(1190, 150), ["HITS REFILL YOUR TIME", "so do time shards"]],
-	[Vector2(2110, 120), ["HOLD TOWARD A WALL TO CLING", "jump to kick off - something waits up the chimney"]],
-	[Vector2(2480, 150), ["THE SHOGUN BENDS TIME TOO", "jump the shockwaves"]],
+	[Vector2(110, 236), ["Hold E to turn time back.", "What you undo keeps moving, as a ghost."]],
+	[Vector2(390, 236), ["Hold the slash and let go, or press Q: an echo of the cut strikes again, as a ghost would.",
+		"Charged, dash to lunge. Charged, aim up or down to spin."]],
+	[Vector2(580, 236), ["Some here move backwards through time.", "Your blade glances off them. Your ghost's does not."]],
+	[Vector2(990, 160), ["Strike at what lies below you in the air", "to spring off it."]],
+	[Vector2(1210, 236), ["Raise your guard just as a blow lands, and you turn it back.", "Even the Shogun's quakes."]],
+	[Vector2(2110, 236), ["Cling to a wall by holding toward it.", "Something waits at the top of the shaft."]],
+	[Vector2(2480, 236), ["Beyond, the Shogun.", "It bends time as you do."]],
 ]
 
 const PLAYER_SPAWN := Vector2(48, 316)
@@ -70,13 +68,16 @@ const WAVE_ARENA_TRIGGER := Rect2(1340, 16, 520, 312)
 const WAVE_ARENA_GATES: Array[Rect2] = [Rect2(1316, 236, 12, 92), Rect2(1872, 236, 12, 92)]
 const BOSS_ARENA_TRIGGER := Rect2(2640, 16, 540, 312)
 const BOSS_ARENA_GATES: Array[Rect2] = [Rect2(2576, 216, 12, 112)]
-const BOSS_SPAWN := Vector2(3020, 306)
+const BOSS_SPAWN := Vector2(3020, 298)
 const PORTAL := Rect2(3130, 276, 30, 52)
 
 const MIN_GHOST_FRAMES := 6
+## Close-up framing like Hollow Knight: 1.5x shows 427x240 of the world, so
+## the camera also follows you up and down within the level's height.
+const CAMERA_ZOOM := 1.5
 ## Camera leads the way you're facing.
-const LOOKAHEAD := 48.0
-const LOOKAHEAD_SPEED := 2.5
+const LOOKAHEAD := 40.0
+const LOOKAHEAD_SPEED := 1.5
 
 const COLOR_WALL := Color("#1a1a2e")
 const COLOR_EDGE := Color("#05d9e8")
@@ -118,9 +119,11 @@ func _ready() -> void:
 		add_child(sign_node)
 
 	# Roaming enemies outside the arenas.
-	_grunt(Vector2(100, 316))
+	# Past the first rock mound, out of reach of the spawn: grunts charge when
+	# they notice you, so the run never opens with a hit.
+	_grunt(Vector2(400, 316))
 	# First inverted grunt, alone, so the player learns the ghost trick.
-	_inverted(_grunt(Vector2(560, 316)))
+	_inverted(_grunt(Vector2(600, 316)))
 	_drone(Vector2(1130, 170))
 	_drone(Vector2(1230, 140))
 	_grunt(Vector2(2500, 316))
@@ -156,12 +159,14 @@ func _ready() -> void:
 		player.hazards.append(thorn[0])
 	add_child(player)
 
+	_camera.zoom = Vector2(CAMERA_ZOOM, CAMERA_ZOOM)
 	_camera.limit_left = 0
 	_camera.limit_right = int(LEVEL_W)
 	_camera.limit_top = 0
 	_camera.limit_bottom = 360
 	_camera.position_smoothing_enabled = true
-	_camera.position_smoothing_speed = 7.0
+	# A slow glide rather than a snap.
+	_camera.position_smoothing_speed = 6.0
 	player.add_child(_camera)
 	_camera.reset_smoothing.call_deferred()
 	_camera.add_child(preload("res://scripts/scenery/rain.gd").new())
@@ -210,9 +215,11 @@ func _physics_process(delta: float) -> void:
 		Game.win()
 
 
+## Grunts stand on the floor: a spawn given at floor level is lifted so the
+## (now taller) body sits on it.
 func _grunt(pos: Vector2) -> Enemy:
 	var enemy := Enemy.new()
-	enemy.position = pos
+	enemy.position = Vector2(pos.x, minf(pos.y, FLOOR_Y - enemy.size.y / 2))
 	add_child(enemy)
 	return enemy
 

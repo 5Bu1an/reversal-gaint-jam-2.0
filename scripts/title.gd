@@ -13,11 +13,13 @@ const BUTTON_Y := 204.0
 const BUTTON_STEP := 40.0
 
 const CONTROLS := [
-	["MOVE", "A / D   or   arrows"],
-	["JUMP", "SPACE   or   Z"],
-	["SLASH", "J   or   X     (hold W / S to aim)"],
-	["DASH", "K   or   C"],
-	["REWIND", "hold L   or   SHIFT"],
+	["MOVE", "W  A  S  D"],
+	["JUMP", "SPACE"],
+	["ATTACK", "LEFT CLICK   -   click fast to combo"],
+	["SPECIAL", "Q   or   hold LEFT CLICK"],
+	["DASH", "SHIFT"],
+	["BLOCK", "hold RIGHT CLICK   -   time it to parry"],
+	["REWIND", "hold E"],
 	["PAUSE", "ESC"],
 ]
 
@@ -158,7 +160,7 @@ func _draw_controls(font: Font) -> void:
 	var panel := Rect2(165, 160, 310, 194)
 	draw_texture_rect(UiArt.MODAL, panel, false)
 	for i in CONTROLS.size():
-		var y := panel.position.y + 42 + i * 21.0
+		var y := panel.position.y + 38 + i * 16.5
 		draw_string(font, Vector2(panel.position.x + 40, y), CONTROLS[i][0], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, COLOR_TIME)
 		draw_string(font, Vector2(panel.position.x + 112, y), CONTROLS[i][1], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, UiArt.INK)
 	draw_string(font, Vector2(0, panel.end.y - 26), "SPACE to go back", HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 8, Color(UiArt.INK, 0.6))

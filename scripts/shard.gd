@@ -16,8 +16,7 @@ func _physics_process(delta: float) -> void:
 	var player: Player = get_tree().get_first_node_in_group("player")
 	if player and not player.dead and player.position.distance_to(position) < RADIUS + 8.0:
 		Rewind.add_time(MS)
-		Fx.burst(position, COLOR, 16, 110.0)
-		Fx.flash(COLOR, 0.15)
+		Fx.burst(position, COLOR, 8, 90.0)
 		Sfx.play("shard")
 		queue_free()
 

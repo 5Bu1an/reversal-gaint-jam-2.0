@@ -3,9 +3,18 @@ extends CharacterBody2D
 ## Hollow Knight-style controller: instant run and stop, a jump that rises at a
 ## steady speed while held and falls fast, dash, directional slash with recoil
 ## and pogo off enemies with a down-slash. Hold toward a wall in the air to
-## cling and slide; jump to kick off it (Mantis Claw). Hold attack to charge an echo slash
-## (nail art): its echo strikes the same spot again a moment later as a ghost
-## hit, so it can hurt inverted enemies. Spikes cost 1 HP and put you back
+## cling and slide; jump to kick off it (Mantis Claw). Hold attack to charge
+## a nail art, then: release for the Great Slash (double damage, and its echo
+## strikes the same spot again a moment later as a ghost hit, so it can hurt
+## inverted enemies); dash for the Dash Slash (a lunge that cuts through
+## everything in its path); or release holding up/down for the Cyclone Slash
+## (a spin that hits all around); Q fires the same nail arts at once, on a
+## cooldown. Sideways swings chain into a three-hit combo: a high-to-low
+## diagonal, a low-to-high return cut, then a wide flat finisher. Slashes aim
+## at the mouse cursor (above: up, below in the air: down, otherwise toward
+## it). Holding block (right click) guards against hits from the front for a
+## little time each; raising it just as a hit lands is a time-parry that turns
+## the attack back. Spikes cost 1 HP and put you back
 ## on the last safe ground you stood on. Drawn as placeholder shapes until
 ## sprites land in assets/art.
 
@@ -28,10 +37,10 @@ const ATTACK_TIME := 0.15
 const ATTACK_COOLDOWN := 0.3
 const POGO_VELOCITY := -340.0
 ## Landing a sideways slash pushes you back a little, like the nail does.
-const RECOIL_SPEED := 170.0
+const RECOIL_SPEED := 100.0
 const RECOIL_TIME := 0.08
-const MAX_HP := 5
-const INVULN_TIME := 0.8
+const MAX_HP := 6
+const INVULN_TIME := 1.2
 const HURT_TIME := 0.25
 const KNOCKBACK := Vector2(180, -200)
 const MS_PER_HIT := 400.0
@@ -44,6 +53,32 @@ const CHARGE_TIME := 0.6
 const CHARGE_GLOW_FROM := 0.15
 const ECHO_DELAY := 0.5
 const ECHO_FLASH := 0.12
+const NAIL_ART_DAMAGE := 2
+const DASH_SLASH_SPEED := 460.0
+const DASH_SLASH_TIME := 0.2
+## The lunge hits from just behind you to a sword's reach in front.
+const DASH_SLASH_REACH := 34.0
+const CYCLONE_TIME := 0.45
+const CYCLONE_HITS := 3
+const CYCLONE_SIZE := Vector2(72, 44)
+## Spinning drifts at this fraction of run speed and barely falls.
+const CYCLONE_DRIFT := 0.5
+const CYCLONE_FALL := 40.0
+## Swing again within this long to continue the combo.
+const COMBO_WINDOW := 0.5
+const COMBO_LENGTH := 3
+## Raising your guard this soon before a hit lands parries it.
+const PARRY_WINDOW := 0.15
+## Holding block: slower walk; each blocked hit costs this much time and
+## pushes you back, and with too little time left the guard breaks.
+const BLOCK_SLOW := 0.4
+const BLOCK_COST_MS := 300.0
+const BLOCK_GRACE := 0.3
+## Q fires a nail art at once (no charge), then needs this long to recover.
+const SPECIAL_COOLDOWN := 1.2
+const PARRY_MS := 600.0
+## Untouchable this long after a parry (without the hurt blink).
+const PARRY_GRACE := 0.35
 const WALL_SLIDE_SPEED := 60.0
 const WALL_JUMP_X := 190.0
 ## Push away from the wall this long before input steers again.
@@ -69,6 +104,21 @@ var attack_t := 0.0
 var attack_cd := 0.0
 var attack_dir := Vector2.RIGHT
 var attack_id := 0
+## 1 for a normal swing; nail arts hit harder.
+var attack_damage := 1
+var dash_slash_t := 0.0
+var cyclone_t := 0.0
+var parry_t := 0.0
+## Which swing of the combo comes next, and how long it stays open.
+var combo_step := 0
+var combo_t := 0.0
+## Aim at the cursor. Input state, not part of the rewind snapshot; the
+## autopilot turns it off so scripted swings aim with W/S.
+var aim_with_mouse := true
+var blocking := false
+## Time since the guard went up, for the parry window.
+var block_t := 0.0
+var special_cd := 0.0
 var invuln_t := 0.0
 var hurt_t := 0.0
 var grounded := true
@@ -90,6 +140,7 @@ var wall_sliding := false
 
 var _sprite := RoninSprite.new()
 var _afterimage_t := 0.0
+var _step_t := 0.0
 
 ## Damage rects in world space, set by the level.
 var hazards: Array[Rect2] = []
@@ -117,6 +168,42 @@ func _ready() -> void:
 	add_child(shape)
 	add_child(_sprite)
 	safe_pos = position
+	Input.set_default_cursor_shape(Input.CURSOR_CROSS)
+
+
+## Where a slash goes: toward the cursor (turning to face it), or for the
+## autopilot up/down from W/S, else forward.
+func _face_cursor() -> void:
+	if not aim_with_mouse:
+		return
+	var to_x := get_global_mouse_position().x - position.x
+	if to_x != 0.0:
+		facing = 1 if to_x > 0.0 else -1
+
+
+func _aim_dir() -> Vector2:
+	if aim_with_mouse:
+		var to := get_global_mouse_position() - position
+		if to.y < -absf(to.x):
+			return Vector2.UP
+		if to.y > absf(to.x) and not is_on_floor():
+			return Vector2.DOWN
+		if to.x != 0.0:
+			facing = 1 if to.x > 0.0 else -1
+		return Vector2(facing, 0)
+	if Input.is_action_pressed("move_up"):
+		return Vector2.UP
+	if Input.is_action_pressed("move_down") and not is_on_floor():
+		return Vector2.DOWN
+	return Vector2(facing, 0)
+
+
+## Cyclone needs an up/down aim: the cursor well above or below, or W/S held.
+func _aims_vertically() -> bool:
+	if aim_with_mouse:
+		var to := get_global_mouse_position() - position
+		return absf(to.y) > absf(to.x)
+	return Input.is_action_pressed("move_up") or Input.is_action_pressed("move_down")
 
 
 func _physics_process(delta: float) -> void:
@@ -142,9 +229,17 @@ func _physics_process(delta: float) -> void:
 		buffer_t = JUMP_BUFFER
 
 	var input_x := Input.get_axis("move_left", "move_right")
-	if dash_t > 0.0:
+	if dash_slash_t > 0.0:
+		velocity = Vector2(facing * DASH_SLASH_SPEED, 0)
+	elif cyclone_t > 0.0:
+		velocity.x = input_x * RUN_SPEED * CYCLONE_DRIFT
+		velocity.y = minf(velocity.y + GRAVITY * delta, CYCLONE_FALL)
+	elif dash_t > 0.0:
 		velocity = Vector2(facing * DASH_SPEED, 0)
 		charge_t = 0.0
+		if Input.is_action_just_pressed("special") and special_cd <= 0.0:
+			special_cd = SPECIAL_COOLDOWN
+			_dash_slash()
 	elif hurt_t > 0.0:
 		velocity.y = minf(velocity.y + GRAVITY * delta, MAX_FALL)
 		charge_t = 0.0
@@ -163,6 +258,14 @@ func _physics_process(delta: float) -> void:
 			if input_x != 0.0:
 				facing = int(signf(input_x))
 			velocity.x = input_x * RUN_SPEED
+		if Input.is_action_just_pressed("block"):
+			block_t = 0.0
+			charge_t = 0.0
+		blocking = Input.is_action_pressed("block")
+		if blocking:
+			_face_cursor()
+			if recoil_t <= 0.0:
+				velocity.x *= BLOCK_SLOW
 		if jump_hold_t > 0.0 and Input.is_action_pressed("jump"):
 			velocity.y = -JUMP_SPEED
 			jump_hold_t = maxf(jump_hold_t - delta, 0.0)
@@ -191,42 +294,58 @@ func _physics_process(delta: float) -> void:
 			buffer_t = 0.0
 			coyote_t = 0.0
 			squash = Vector2(0.75, 1.3)
-			Fx.dust(_feet())
+			Fx.dust(_feet(), 3)
 			Sfx.play("jump")
 		if Input.is_action_just_released("jump") and velocity.y < 0.0:
 			jump_hold_t = 0.0
 			velocity.y = maxf(velocity.y, -JUMP_RELEASE_SPEED)
-		if Input.is_action_just_pressed("dash") and dash_cd <= 0.0 and (is_on_floor() or not air_dash_used):
+		if Input.is_action_just_pressed("dash") and charge_t >= CHARGE_TIME:
+			_dash_slash()
+		elif Input.is_action_just_pressed("dash") and dash_cd <= 0.0 and (is_on_floor() or not air_dash_used):
 			dash_t = DASH_TIME
 			dash_cd = DASH_COOLDOWN
 			air_dash_used = not is_on_floor()
 			squash = Vector2(1.35, 0.8)
-			Fx.burst(position, COLOR_VISOR, 8, 90.0, 30.0, Vector2(-facing, 0))
+			Fx.burst(position, COLOR_VISOR, 4, 80.0, 30.0, Vector2(-facing, 0))
 			Sfx.play("dash")
-		if Input.is_action_just_pressed("attack") and attack_cd <= 0.0:
+		if blocking:
+			pass
+		elif Input.is_action_just_pressed("special") and special_cd <= 0.0:
+			special_cd = SPECIAL_COOLDOWN
+			charge_t = 0.0
+			if _aims_vertically():
+				_cyclone_slash()
+			else:
+				_echo_slash()
+		elif Input.is_action_just_pressed("attack") and attack_cd <= 0.0:
 			_start_attack()
 		elif Input.is_action_just_released("attack"):
-			if charge_t >= CHARGE_TIME:
+			if charge_t >= CHARGE_TIME and _aims_vertically():
+				_cyclone_slash()
+			elif charge_t >= CHARGE_TIME:
 				_echo_slash()
 			charge_t = 0.0
 		elif Input.is_action_pressed("attack"):
 			var was_ready := charge_t >= CHARGE_TIME
 			charge_t += delta
 			if not was_ready and charge_t >= CHARGE_TIME:
-				Fx.burst(position, Ghost.COLOR, 10, 80.0)
+				Fx.burst(position, Ghost.COLOR, 5, 70.0)
 				Sfx.play("charge")
 
 	var fall_speed := velocity.y
 	move_and_slide()
 	if is_on_floor() and not grounded and fall_speed > 150.0:
 		squash = Vector2(1.3, 0.75)
-		Fx.dust(_feet(), 8)
+		Fx.dust(_feet(), 4 if fall_speed > 300.0 else 2)
 	grounded = is_on_floor()
 	_dash_trail(delta)
+	_run_dust(delta)
 	if is_on_floor() and hurt_t <= 0.0 and _on_safe_ground():
 		safe_pos = position
 	if attack_t > 0.0:
 		_resolve_attack()
+	if cyclone_t > 0.0:
+		_update_cyclone(delta)
 	_update_echoes(delta)
 	_check_damage()
 
@@ -234,9 +353,17 @@ func _physics_process(delta: float) -> void:
 ## Afterimages while dashing.
 func _dash_trail(delta: float) -> void:
 	_afterimage_t -= delta
-	if dash_t > 0.0 and _afterimage_t <= 0.0:
+	if (dash_t > 0.0 or dash_slash_t > 0.0) and _afterimage_t <= 0.0:
 		_afterimage_t = 0.035
 		Fx.afterimage(_sprite)
+
+
+## Little puffs kicked up while running.
+func _run_dust(delta: float) -> void:
+	_step_t -= delta
+	if is_on_floor() and absf(velocity.x) > 60.0 and dash_t <= 0.0 and _step_t <= 0.0:
+		_step_t = 0.22
+		Fx.dust(_feet() - Vector2(facing * 4.0, 0), 2)
 
 
 func _tick_timers(delta: float) -> void:
@@ -251,27 +378,98 @@ func _tick_timers(delta: float) -> void:
 	recoil_t = maxf(recoil_t - delta, 0.0)
 	wall_t = maxf(wall_t - delta, 0.0)
 	wall_lock_t = maxf(wall_lock_t - delta, 0.0)
+	dash_slash_t = maxf(dash_slash_t - delta, 0.0)
+	parry_t = maxf(parry_t - delta, 0.0)
+	combo_t = maxf(combo_t - delta, 0.0)
+	special_cd = maxf(special_cd - delta, 0.0)
+	block_t += delta
 
 
 func _start_attack() -> void:
 	attack_t = ATTACK_TIME
 	attack_cd = ATTACK_COOLDOWN
 	attack_id += 1
-	if Input.is_action_pressed("move_up"):
-		attack_dir = Vector2.UP
-	elif Input.is_action_pressed("move_down") and not is_on_floor():
-		attack_dir = Vector2.DOWN
+	attack_damage = 1
+	attack_dir = _aim_dir()
+	# Lean into the swing.
+	squash = Vector2(1.12, 0.9)
+	if attack_dir.x != 0.0:
+		_combo_swipe()
 	else:
-		attack_dir = Vector2(facing, 0)
+		Fx.swipe(self, attack_dir)
 	Sfx.play("slash")
 
 
+## Each sideways swing in a row cuts a different way.
+func _combo_swipe() -> void:
+	combo_step = (combo_step + 1) % COMBO_LENGTH if combo_t > 0.0 else 0
+	combo_t = COMBO_WINDOW
+	match combo_step:
+		0: # high to low, tilted up
+			Fx.swipe(self, attack_dir, 26.0, Color.WHITE, facing, -0.3 * facing)
+		1: # low to high, tilted down
+			Fx.swipe(self, attack_dir, 26.0, Color.WHITE, -facing, 0.3 * facing)
+		2: # wide flat finisher
+			Fx.swipe(self, attack_dir, 36.0, Color.WHITE, facing, 0.0, 0.45)
+
+
+## Great Slash: a double-damage swing that leaves an echo behind.
 func _echo_slash() -> void:
 	_start_attack()
+	attack_damage = NAIL_ART_DAMAGE
+	Fx.swipe(self, attack_dir, 32.0)
 	echoes.append({
 		"rect": attack_rect(position, attack_dir), "dir": attack_dir, "id": attack_id, "t": ECHO_DELAY,
 	})
-	Fx.burst(position, Ghost.COLOR, 12, 140.0, 40.0, attack_dir)
+	Fx.burst(position, Ghost.COLOR, 6, 120.0, 40.0, attack_dir)
+
+
+## Dash Slash: lunge forward, cutting through everything along the way.
+func _dash_slash() -> void:
+	charge_t = 0.0
+	if aim_with_mouse:
+		var to_x := get_global_mouse_position().x - position.x
+		if to_x != 0.0:
+			facing = 1 if to_x > 0.0 else -1
+	attack_id += 1
+	attack_damage = NAIL_ART_DAMAGE
+	attack_dir = Vector2(facing, 0)
+	attack_t = DASH_SLASH_TIME
+	attack_cd = ATTACK_COOLDOWN
+	dash_slash_t = DASH_SLASH_TIME
+	dash_cd = DASH_COOLDOWN
+	squash = Vector2(1.4, 0.75)
+	Fx.lunge(position, attack_dir)
+	Fx.swipe(self, attack_dir, 28.0)
+	Sfx.play("dash")
+	Sfx.play("slash")
+
+
+## Cyclone Slash: spin in place, hitting all around a few times.
+func _cyclone_slash() -> void:
+	attack_id += 1
+	attack_cd = CYCLONE_TIME
+	cyclone_t = CYCLONE_TIME
+	velocity.y = minf(velocity.y, 0.0)
+	Sfx.play("slash")
+
+
+func _update_cyclone(delta: float) -> void:
+	var step := CYCLONE_TIME / CYCLONE_HITS
+	var before := cyclone_t
+	cyclone_t = maxf(cyclone_t - delta, 0.0)
+	# One hit at the start of each third of the spin.
+	var hit := int((CYCLONE_TIME - cyclone_t) / step)
+	if hit != int((CYCLONE_TIME - before) / step) or before == CYCLONE_TIME:
+		facing = -facing
+		Fx.swipe(self, Vector2(facing, 0), 30.0)
+		var rect := Rect2(position - CYCLONE_SIZE / 2, CYCLONE_SIZE)
+		for enemy: Enemy in get_tree().get_nodes_in_group("enemies"):
+			if rect.intersects(enemy.hurt_rect()) and enemy.take_hit("p%d_c%d" % [attack_id, hit], Vector2(facing, 0)):
+				Rewind.add_time(MS_PER_HIT)
+				Fx.hit_stop(0.02)
+		if hit < CYCLONE_HITS:
+			Sfx.play("slash")
 
 
 ## Echo hits use a "g" key, so they count as ghost hits.
@@ -285,7 +483,7 @@ func _update_echoes(delta: float) -> void:
 			for enemy: Enemy in get_tree().get_nodes_in_group("enemies"):
 				if rect.intersects(enemy.hurt_rect()):
 					enemy.take_hit("g_echo%d" % echo.id, echo.dir)
-			Fx.burst(rect.get_center(), Ghost.COLOR, 10, 120.0)
+			Fx.burst(rect.get_center(), Ghost.COLOR, 5, 100.0)
 			Sfx.play("slash")
 		if echo.t <= -ECHO_FLASH:
 			echoes.remove_at(i)
@@ -293,18 +491,25 @@ func _update_echoes(delta: float) -> void:
 
 func _resolve_attack() -> void:
 	var rect := attack_rect(position, attack_dir)
+	if dash_slash_t > 0.0:
+		var back := position.x - facing * SIZE.x
+		var front := position.x + facing * DASH_SLASH_REACH
+		rect = Rect2(minf(back, front), position.y - 12, absf(front - back), 24)
 	for enemy: Enemy in get_tree().get_nodes_in_group("enemies"):
 		if not rect.intersects(enemy.hurt_rect()):
 			continue
-		if enemy.take_hit("p%d" % attack_id, attack_dir):
+		if enemy.take_hit("p%d" % attack_id, attack_dir, attack_damage):
 			Rewind.add_time(MS_PER_HIT)
-			Fx.hit_stop(0.045)
-			Fx.shake(2.0)
+			# A crisp, tiny freeze and a nudge toward the blow; the combo
+			# finisher lands harder.
+			var finisher := attack_dir.x != 0.0 and combo_step == COMBO_LENGTH - 1
+			Fx.hit_stop(0.06 if finisher else 0.03)
+			Fx.kick(attack_dir, 5.0 if finisher else 3.0)
 			if attack_dir == Vector2.DOWN:
 				velocity.y = POGO_VELOCITY
 				jump_hold_t = 0.0
 				air_dash_used = false
-			elif attack_dir.x != 0.0:
+			elif attack_dir.x != 0.0 and dash_slash_t <= 0.0:
 				recoil_t = RECOIL_TIME
 				recoil_dir = -int(attack_dir.x)
 
@@ -316,13 +521,46 @@ func _check_damage() -> void:
 		if body.intersects(rect):
 			_spike_hit()
 			return
-	if invuln_t > 0.0:
+	if invuln_t > 0.0 or parry_t > 0.0:
 		return
 	for enemy: Enemy in get_tree().get_nodes_in_group("enemies"):
 		for rect in enemy.damage_rects():
-			if body.intersects(rect):
+			if not body.intersects(rect):
+				continue
+			if blocking and _in_front(rect) and block_t <= PARRY_WINDOW:
+				_parry(enemy, rect)
+			elif blocking and _in_front(rect) and Rewind.time_ms >= BLOCK_COST_MS:
+				_block(rect)
+			else:
 				_take_damage(rect.get_center())
-				return
+			return
+
+
+func _in_front(rect: Rect2) -> bool:
+	return (rect.get_center().x - position.x) * facing >= -2.0
+
+
+## A blocked hit: no damage, but it costs time and shoves you back.
+func _block(rect: Rect2) -> void:
+	Rewind.time_ms = maxf(Rewind.time_ms - BLOCK_COST_MS, 0.0)
+	parry_t = BLOCK_GRACE
+	recoil_t = RECOIL_TIME * 2.0
+	recoil_dir = -facing
+	Fx.hit_stop(0.04)
+	Fx.impact(rect.get_center(), Vector2(-facing, 0), 0.7, Color(0.75, 0.97, 1.0))
+	Sfx.play("deflect")
+
+
+## Time-parry: the attack is turned back, and you gain time for it.
+func _parry(enemy: Enemy, rect: Rect2) -> void:
+	enemy.parried(rect, position)
+	parry_t = PARRY_GRACE
+	Rewind.add_time(PARRY_MS)
+	Fx.hit_stop(0.08)
+	Fx.parry(rect.get_center())
+	Sfx.play("deflect")
+	recoil_t = RECOIL_TIME
+	recoil_dir = -facing
 
 
 func _take_damage(source: Vector2) -> void:
@@ -337,10 +575,9 @@ func _take_damage(source: Vector2) -> void:
 		away = -facing
 	velocity = Vector2(away * KNOCKBACK.x, KNOCKBACK.y)
 	Sfx.play("death" if hp <= 0 else "hurt")
-	Fx.flash(COLOR_BODY, 0.28)
+	Fx.hurt(position)
 	Fx.hit_stop(0.12)
-	Fx.shake(6.0)
-	Fx.burst(position, COLOR_BODY, 14, 160.0)
+	Fx.shake(3.0)
 	if hp <= 0:
 		_die()
 
@@ -348,9 +585,9 @@ func _take_damage(source: Vector2) -> void:
 func _spike_hit() -> void:
 	hp -= 1
 	Sfx.play("hurt")
+	Fx.hurt(position)
 	Fx.hit_stop(0.12)
-	Fx.shake(6.0)
-	Fx.burst(position, COLOR_BODY, 14, 160.0)
+	Fx.shake(3.0)
 	if hp <= 0:
 		_die()
 		return
@@ -368,7 +605,8 @@ func _tick_respawn(delta: float) -> void:
 	respawn_t = maxf(respawn_t - delta, 0.0)
 	if before > half and respawn_t <= half:
 		position = safe_pos
-		Fx.burst(position, COLOR_VISOR, 12, 100.0)
+		reset_physics_interpolation()
+		Fx.burst(position, COLOR_VISOR, 6, 80.0)
 	velocity = Vector2.ZERO
 
 
@@ -394,8 +632,8 @@ func shade_spot() -> Vector2:
 func _die() -> void:
 	dead = true
 	velocity = Vector2.ZERO
-	Fx.shake(10.0)
-	Fx.burst(position, COLOR_BODY, 30, 220.0)
+	Fx.shake(5.0)
+	Fx.burst(position, COLOR_BODY, 16, 180.0)
 
 
 func _feet() -> Vector2:
@@ -404,8 +642,19 @@ func _feet() -> Vector2:
 
 ## The sprite draws the body; this layer adds the charge glow and echoes.
 func _draw() -> void:
+	if blocking:
+		# Guard: a bright arc in front, flaring during the parry window.
+		var parry_ready := block_t <= PARRY_WINDOW
+		var guard := Color.WHITE if parry_ready else Color(COLOR_VISOR, 0.85)
+		var mid := 0.0 if facing > 0 else PI
+		draw_arc(Vector2(facing * 4, -2), 14.0, mid - 1.0, mid + 1.0, 12, guard, 3.0 if parry_ready else 2.0)
 	_draw_charge()
 	_draw_echoes()
+	if cyclone_t > 0.0:
+		var spin := (1.0 - cyclone_t / CYCLONE_TIME) * TAU * CYCLONE_HITS
+		var r := CYCLONE_SIZE.x / 2 - 6
+		draw_arc(Vector2.ZERO, r, spin, spin + PI * 1.2, 20, Color(COLOR_VISOR, 0.8), 2.0)
+		draw_arc(Vector2.ZERO, r - 5, spin + PI, spin + PI * 2.0, 20, Color(COLOR_VISOR, 0.4), 1.0)
 
 
 func _draw_charge() -> void:
@@ -416,6 +665,12 @@ func _draw_charge() -> void:
 	var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 60.0) if ready else k
 	var color := Color.WHITE if ready else Ghost.COLOR
 	draw_arc(Vector2.ZERO, 10.0 + 8.0 * k, 0.0, TAU, 24, Color(color, 0.25 + 0.5 * pulse), 1.0 + k)
+	# Sparks spiralling in as the charge builds.
+	var spin := Time.get_ticks_msec() / 120.0
+	for i in 4:
+		var a := spin + i * TAU / 4.0
+		var r := 26.0 * (1.0 - k) + 8.0
+		draw_circle(Vector2.from_angle(a) * r, 1.5 + k, Color(color, 0.4 + 0.5 * k))
 
 
 func _draw_echoes() -> void:
@@ -438,6 +693,9 @@ func capture_state() -> Dictionary:
 		"safe_pos": safe_pos, "respawn_t": respawn_t, "charge_t": charge_t, "echoes": echoes.duplicate(true),
 		"wall_t": wall_t, "wall_dir": wall_dir, "wall_lock_t": wall_lock_t,
 		"jump_hold_t": jump_hold_t, "recoil_t": recoil_t, "recoil_dir": recoil_dir,
+		"attack_damage": attack_damage, "dash_slash_t": dash_slash_t, "cyclone_t": cyclone_t,
+		"parry_t": parry_t, "combo_step": combo_step, "combo_t": combo_t,
+		"blocking": blocking, "block_t": block_t, "special_cd": special_cd,
 	}
 
 

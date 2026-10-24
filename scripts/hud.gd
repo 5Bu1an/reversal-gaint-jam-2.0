@@ -181,9 +181,6 @@ func _draw_message(font: Font, player: Player) -> void:
 		UiArt.draw_painted(self, UiArt.HEADER, Vector2(size.x / 2.0, 150), 22.0)
 		UiArt.draw_painted(self, UiArt.FOOTER, Vector2(size.x / 2.0, 200), 22.0)
 		draw_string(font, Vector2(0, 180), msg, HORIZONTAL_ALIGNMENT_CENTER, size.x, 16, color)
-	elif Game.checkpoint == 0 and player.position.x < 600:
-		draw_string(font, Vector2(16, 348), "A/D move  SPACE jump  J slash  K dash  hold L rewind  ESC pause",
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 8, COLOR_DIM)
 
 
 func _draw_boss_bar(font: Font) -> void:

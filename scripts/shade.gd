@@ -40,15 +40,14 @@ func damage_rects() -> Array[Rect2]:
 
 ## Any slash (yours or a ghost's) collects it. Returns false so the hit
 ## doesn't also pay out MS_PER_HIT or pogo you.
-func take_hit(key: String, _from_dir: Vector2) -> bool:
+func take_hit(key: String, _from_dir: Vector2, _damage := 1) -> bool:
 	if not is_active() or key == last_hit:
 		return false
 	last_hit = key
 	dead = true
 	Rewind.add_time(ms)
 	Game.shade = {}
-	Fx.burst(position, Ghost.COLOR, 30, 180.0)
-	Fx.shake(4.0)
+	Fx.kill(position, Vector2.UP, Ghost.COLOR)
 	Sfx.play("shard")
 	return false
 
@@ -58,5 +57,3 @@ func _draw() -> void:
 	if dead:
 		return
 	modulate.a = 0.55 + 0.15 * sin(_t * 5.0)
-	draw_string(ThemeDB.fallback_font, Vector2(-40, -24), "%d ms" % ms,
-		HORIZONTAL_ALIGNMENT_CENTER, 80, 8, Ghost.COLOR)

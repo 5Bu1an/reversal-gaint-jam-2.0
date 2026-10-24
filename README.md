@@ -13,17 +13,23 @@ fights alongside you.
 
 ## Controls
 
-| Action | Keys |
+| Action | Input |
 | --- | --- |
-| Move | A / D or ← / → |
-| Look up / down | W / S or ↑ / ↓ |
-| Jump (hold to go higher, tap for a short hop) | Space or Z |
-| Wall cling / wall jump | In the air, hold toward a wall; Jump to kick off |
-| Attack | J or X |
-| Echo slash (hits again 0.5 s later, as a ghost) | Hold J or X ~0.6 s, release |
-| Dash | K or C |
-| Rewind (hold) | L or Shift |
-| Reboot after dying (lose your time to a shade) | Jump while down |
+| Move | W A S D |
+| Jump (hold to go higher, tap for a short hop) | Space |
+| Attack (click again quickly for a 3-hit combo) | Left click: aims at the cursor (above: up, below in the air: pogo, else toward it) |
+| Special (nail art, no charge needed; 1.2 s cooldown) | Q: Great Slash; aiming up/down: Cyclone Slash; while dashing: Dash Slash |
+| Dash | Shift |
+| Block (hits from the front cost 0.3 s of time instead of health; breaks if you're out of time) | Hold right click |
+| Time-parry (turn the attack back, +0.6 s, reflect boss shockwaves) | Raise the guard just as a hit lands |
+| Rewind time | Hold E |
+| Pause | Esc |
+| Wall cling / wall jump | In the air, hold toward a wall; Space to kick off |
+| Reboot after dying (lose your time to a shade) | Space while down |
+| **Charged nail arts:** hold left click ~0.6 s until the ring pulses, then… | |
+| Great Slash (2 damage; its echo hits again 0.5 s later, as a ghost) | …release |
+| Dash Slash (lunge, 2 damage to everything in its path) | …press Shift |
+| Cyclone Slash (spin, 3 hits all around) | …release aiming up or down |
 
 ## Web build (itch.io)
 
