@@ -69,6 +69,12 @@ func _act(delta: float) -> void:
 	move_and_slide()
 
 
+func parried(rect: Rect2, from: Vector2) -> void:
+	super(rect, from)
+	mode = Mode.RETURN
+	velocity = (position - from).normalized() * PARRY_KNOCKBACK
+
+
 func _draw_body(body: Color) -> void:
 	draw_rect(Rect2(-size / 2, size), body)
 	# Rotor struts.

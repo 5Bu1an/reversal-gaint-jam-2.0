@@ -20,7 +20,11 @@ fights alongside you.
 | Jump (hold to go higher, tap for a short hop) | Space or Z |
 | Wall cling / wall jump | In the air, hold toward a wall; Jump to kick off |
 | Attack | J or X |
-| Echo slash (hits again 0.5 s later, as a ghost) | Hold J or X ~0.6 s, release |
+| Time-parry (an attack that lands as you swing is turned back; +0.6 s) | Attack just before a hit lands |
+| **Nail arts:** hold J or X ~0.6 s until the ring pulses, then… | |
+| Great Slash (2 damage; its echo hits again 0.5 s later, as a ghost) | …release |
+| Dash Slash (lunge, 2 damage to everything in its path) | …press Dash |
+| Cyclone Slash (spin, 3 hits all around) | …release while holding W/S or ↑/↓ |
 | Dash | K or C |
 | Rewind (hold) | L or Shift |
 | Reboot after dying (lose your time to a shade) | Jump while down |

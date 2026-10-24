@@ -8,6 +8,9 @@ extends Enemy
 ## It bends time too: take too much damage too fast and it rewinds itself to
 ## where (and how healthy) it was a few seconds ago. It's inverted while it
 ## does, so only a ghost hit can interrupt it. Twice per fight.
+##
+## Parrying its charge stops it dead; parrying a shockwave sends it back the
+## other way, and when it reaches the boss it lands as a ghost hit.
 
 enum Mode { STALK, WINDUP_CHARGE, CHARGE, WINDUP_SLAM, AIR, RECOVER, REVERSING }
 
@@ -40,6 +43,9 @@ var mode_t := 1.0
 var attacks := 0
 ## Live shockwaves as (x, floor_y, dir).
 var waves: Array[Vector3] = []
+## Parried shockwaves heading back at the boss, same layout.
+var reflected: Array[Vector3] = []
+var reflect_id := 0
 ## Counts down to the next inverted/normal flip once enraged.
 var invert_t := 0.0
 ## Its own short history as (x, y, hp), oldest first.
@@ -138,6 +144,34 @@ func _act(delta: float) -> void:
 		waves[i] = w
 		if w.x < arena_left or w.x > arena_right:
 			waves.remove_at(i)
+	for i in range(reflected.size() - 1, -1, -1):
+		var w := reflected[i]
+		w.x += w.z * wave_speed * delta
+		reflected[i] = w
+		if _wave_rect(w).intersects(hurt_rect()):
+			reflected.remove_at(i)
+			reflect_id += 1
+			take_hit("g_reflect%d" % reflect_id, Vector2(w.z, 0))
+		elif w.x < arena_left or w.x > arena_right:
+			reflected.remove_at(i)
+
+
+func _wave_rect(w: Vector3) -> Rect2:
+	return Rect2(w.x - WAVE_SIZE.x / 2, w.y - WAVE_SIZE.y, WAVE_SIZE.x, WAVE_SIZE.y)
+
+
+func parried(rect: Rect2, _from: Vector2) -> void:
+	for i in waves.size():
+		if _wave_rect(waves[i]) == rect:
+			var w := waves[i]
+			waves.remove_at(i)
+			reflected.append(Vector3(w.x, w.y, -w.z))
+			return
+	# The body: a parried charge stops dead.
+	hurt_t = HURT_TIME
+	velocity.x = 0.0
+	if mode == Mode.CHARGE:
+		_recover(0.8)
 
 
 func _start_reversal() -> void:
@@ -184,7 +218,7 @@ func damage_rects() -> Array[Rect2]:
 		return []
 	var rects: Array[Rect2] = [hurt_rect()]
 	for w in waves:
-		rects.append(Rect2(w.x - WAVE_SIZE.x / 2, w.y - WAVE_SIZE.y, WAVE_SIZE.x, WAVE_SIZE.y))
+		rects.append(_wave_rect(w))
 	return rects
 
 
@@ -198,6 +232,7 @@ func take_hit(key: String, from_dir: Vector2, damage := 1) -> bool:
 		_start_reversal()
 	if dead:
 		waves.clear()
+		reflected.clear()
 		Fx.hit_stop(0.35)
 		Fx.shake(6.0)
 		Fx.burst(position, COLOR_GOLD, 24, 220.0)
@@ -229,12 +264,13 @@ func _draw_body(body: Color) -> void:
 	if mode == Mode.CHARGE:
 		draw_line(Vector2(-dir * half.x, -6), Vector2(-dir * (half.x + 18), -6), COLOR_TRIM, 2.0)
 		draw_line(Vector2(-dir * half.x, 8), Vector2(-dir * (half.x + 12), 8), COLOR_TRIM, 2.0)
-	for w in waves:
-		var base := Vector2(w.x, w.y) - position
-		draw_colored_polygon(PackedVector2Array([
-			base + Vector2(-WAVE_SIZE.x / 2, 0), base + Vector2(0, -WAVE_SIZE.y),
-			base + Vector2(WAVE_SIZE.x / 2, 0),
-		]), COLOR_TRIM)
+	for list: Array in [waves, reflected]:
+		for w: Vector3 in list:
+			var base := Vector2(w.x, w.y) - position
+			draw_colored_polygon(PackedVector2Array([
+				base + Vector2(-WAVE_SIZE.x / 2, 0), base + Vector2(0, -WAVE_SIZE.y),
+				base + Vector2(WAVE_SIZE.x / 2, 0),
+			]), COLOR_TRIM if list == waves else Ghost.COLOR)
 
 
 func capture_state() -> Dictionary:
@@ -243,6 +279,7 @@ func capture_state() -> Dictionary:
 		"mode": mode, "mode_t": mode_t, "attacks": attacks, "waves": waves.duplicate(), "invert_t": invert_t,
 		"snaps": snaps.duplicate(), "snap_t": snap_t, "reversals_left": reversals_left,
 		"reverse_path": reverse_path.duplicate(), "reverse_t": reverse_t,
+		"reflected": reflected.duplicate(), "reflect_id": reflect_id,
 	})
 	return state
 
@@ -253,3 +290,4 @@ func apply_state(state: Dictionary) -> void:
 	waves = state.waves.duplicate()
 	snaps = state.snaps.duplicate()
 	reverse_path = state.reverse_path.duplicate()
+	reflected = state.reflected.duplicate()

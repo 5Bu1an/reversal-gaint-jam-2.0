@@ -8,7 +8,8 @@ extends CharacterBody2D
 ## strikes the same spot again a moment later as a ghost hit, so it can hurt
 ## inverted enemies); dash for the Dash Slash (a lunge that cuts through
 ## everything in its path); or release holding up/down for the Cyclone Slash
-## (a spin that hits all around). Spikes cost 1 HP and put you back
+## (a spin that hits all around). Time-parry: an attack that reaches you
+## while a swing is fresh is turned back instead of hurting you. Spikes cost 1 HP and put you back
 ## on the last safe ground you stood on. Drawn as placeholder shapes until
 ## sprites land in assets/art.
 
@@ -58,6 +59,11 @@ const CYCLONE_SIZE := Vector2(72, 44)
 ## Spinning drifts at this fraction of run speed and barely falls.
 const CYCLONE_DRIFT := 0.5
 const CYCLONE_FALL := 40.0
+## A swing parries during its first PARRY_WINDOW seconds.
+const PARRY_WINDOW := 0.12
+const PARRY_MS := 600.0
+## Untouchable this long after a parry (without the hurt blink).
+const PARRY_GRACE := 0.35
 const WALL_SLIDE_SPEED := 60.0
 const WALL_JUMP_X := 190.0
 ## Push away from the wall this long before input steers again.
@@ -87,6 +93,7 @@ var attack_id := 0
 var attack_damage := 1
 var dash_slash_t := 0.0
 var cyclone_t := 0.0
+var parry_t := 0.0
 var invuln_t := 0.0
 var hurt_t := 0.0
 var grounded := true
@@ -281,6 +288,7 @@ func _tick_timers(delta: float) -> void:
 	wall_t = maxf(wall_t - delta, 0.0)
 	wall_lock_t = maxf(wall_lock_t - delta, 0.0)
 	dash_slash_t = maxf(dash_slash_t - delta, 0.0)
+	parry_t = maxf(parry_t - delta, 0.0)
 
 
 func _start_attack() -> void:
@@ -395,13 +403,33 @@ func _check_damage() -> void:
 		if body.intersects(rect):
 			_spike_hit()
 			return
-	if invuln_t > 0.0:
+	if invuln_t > 0.0 or parry_t > 0.0:
 		return
+	var parrying := attack_t > ATTACK_TIME - PARRY_WINDOW
+	var blade := attack_rect(position, attack_dir).grow(4.0)
 	for enemy: Enemy in get_tree().get_nodes_in_group("enemies"):
 		for rect in enemy.damage_rects():
-			if body.intersects(rect):
+			if not body.intersects(rect):
+				continue
+			if parrying and rect.intersects(blade):
+				_parry(enemy, rect)
+			else:
 				_take_damage(rect.get_center())
-				return
+			return
+
+
+## Time-parry: the attack is turned back, and you gain time for it.
+func _parry(enemy: Enemy, rect: Rect2) -> void:
+	enemy.parried(rect, position)
+	parry_t = PARRY_GRACE
+	Rewind.add_time(PARRY_MS)
+	Fx.hit_stop(0.08)
+	Fx.flash(Color.WHITE, 0.12)
+	Fx.burst(rect.get_center(), Color.WHITE, 10, 160.0)
+	Sfx.play("deflect")
+	if attack_dir.x != 0.0:
+		recoil_t = RECOIL_TIME
+		recoil_dir = -int(attack_dir.x)
 
 
 func _take_damage(source: Vector2) -> void:
@@ -523,6 +551,7 @@ func capture_state() -> Dictionary:
 		"wall_t": wall_t, "wall_dir": wall_dir, "wall_lock_t": wall_lock_t,
 		"jump_hold_t": jump_hold_t, "recoil_t": recoil_t, "recoil_dir": recoil_dir,
 		"attack_damage": attack_damage, "dash_slash_t": dash_slash_t, "cyclone_t": cyclone_t,
+		"parry_t": parry_t,
 	}
 
 

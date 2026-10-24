@@ -215,6 +215,23 @@ func _make_plan(plan_name: String) -> Array:
 				[140, "release", "move_up"], [180, "quit", ""], [134, "shot", "cyclone"], [53, "shot", "dash_slash"]]
 			for f in [49, 70, 130, 141, 165]:
 				plan.append([f, "grunt_trace", ""])
+		"parry":
+			# A held grunt is released to charge you; slash just before it
+			# connects. --tap=N picks the frame of the slash.
+			var tap := 47
+			for arg in OS.get_cmdline_user_args():
+				if arg.begins_with("--tap="):
+					tap = int(arg.get_slice("=", 1))
+			plan = [[1, "warp_xy", Vector2(40, 316)], [2, "stage_grunt", Vector2(100, 316)],
+				[3, "grunt_speed", 40.0], [tap, "tap", "attack"], [90, "quit", ""]]
+			for f in range(40, 90, 4):
+				plan.append([f, "parry_trace", ""])
+		"reflect":
+			# Boss arena: a shockwave is sent at you; slash it back into the boss.
+			plan = [[1, "god", ""], [1, "warp", 2680], [60, "boss_wave", 80.0], [76, "tap", "attack"],
+				[260, "quit", ""]]
+			for f in range(58, 260, 12):
+				plan.append([f, "reflect_trace", ""])
 		"win":
 			plan = [[1, "god", ""], [250, "warp", 2680], [255, "press", "move_right"], [260, "kill_boss", ""],
 				[300, "shot", "1_portal_open"], [600, "shot", "2_won"], [620, "quit", ""]]
@@ -383,6 +400,27 @@ func _physics_process(_delta: float) -> void:
 						e.speed = 0.0
 						e.last_hit = ""
 						break
+			"grunt_speed":
+				for e: Enemy in get_tree().get_nodes_in_group("enemies"):
+					if e.get_script() == Enemy and not e.inverted and not e.dormant:
+						e.speed = step[2]
+						break
+			"parry_trace":
+				var p: Player = get_tree().get_first_node_in_group("player")
+				var g: Enemy = null
+				for e: Enemy in get_tree().get_nodes_in_group("enemies"):
+					if e.get_script() == Enemy and not e.inverted and not e.dormant:
+						g = e
+						break
+				print("[parry] frame=%d player_hp=%d time=%d attack_t=%.2f parry_t=%.2f grunt_x=%d grunt_vx=%.0f ai=%s" % [
+					_frame, p.hp, Rewind.time_ms, p.attack_t, p.parry_t, g.position.x, g.velocity.x, Enemy.Ai.keys()[g.ai]])
+			"boss_wave":
+				var p: Player = get_tree().get_first_node_in_group("player")
+				Game.boss.waves.append(Vector3(p.position.x + step[2], 328.0, -1))
+			"reflect_trace":
+				var p: Player = get_tree().get_first_node_in_group("player")
+				print("[reflect] frame=%d player_hp=%d time=%d boss_hp=%d boss_x=%d waves=%s reflected=%s" % [
+					_frame, p.hp, Rewind.time_ms, Game.boss.hp, Game.boss.position.x, Game.boss.waves, Game.boss.reflected])
 			"stage_pogo":
 				var grunt: Enemy = null
 				for e: Enemy in get_tree().get_nodes_in_group("enemies"):

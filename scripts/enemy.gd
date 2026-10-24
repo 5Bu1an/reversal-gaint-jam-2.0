@@ -26,6 +26,9 @@ const RUSH_TIME := 0.9
 const CHARGE_MULT := 3.0
 const RECOVER_TIME := 0.7
 const STAGGER_TIME := 0.4
+## Knocked back and stunned this long when the player parries it.
+const PARRY_KNOCKBACK := 220.0
+const PARRY_STAGGER := 0.9
 
 const COLOR_BODY := Color("#05d9e8")
 const COLOR_EYE := Color("#ff2a6d")
@@ -169,6 +172,15 @@ func take_hit(key: String, from_dir: Vector2, damage := 1) -> bool:
 		Sfx.play("kill")
 		Fx.burst(position, COLOR_BODY, 10, 150.0)
 	return true
+
+
+## The player turned this attack back (rect is the part of us that touched
+## them). By default: knocked away and stunned.
+func parried(_rect: Rect2, from: Vector2) -> void:
+	var away := signf(position.x - from.x)
+	velocity.x = (away if away != 0.0 else -dir) * PARRY_KNOCKBACK
+	hurt_t = HURT_TIME
+	_set_ai(Ai.RECOVER, PARRY_STAGGER)
 
 
 func _ground_ahead() -> bool:
