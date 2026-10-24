@@ -166,9 +166,10 @@ func _check_damage() -> void:
 			_take_damage(rect.get_center())
 			return
 	for enemy: Enemy in get_tree().get_nodes_in_group("enemies"):
-		if not enemy.dead and body.intersects(enemy.hurt_rect()):
-			_take_damage(enemy.position)
-			return
+		for rect in enemy.damage_rects():
+			if body.intersects(rect):
+				_take_damage(rect.get_center())
+				return
 
 
 func _take_damage(source: Vector2) -> void:

@@ -1,5 +1,6 @@
 extends Control
-## Time bar in milliseconds, health pips and the death prompt.
+## Time bar in milliseconds, health pips, boss bar and state messages.
+## Placeholder look; the real UI can replace this using the Game autoload.
 
 const COLOR_TIME := Color("#05d9e8")
 const COLOR_HP := Color("#ff2a6d")
@@ -44,9 +45,33 @@ func _draw() -> void:
 		var pip := Rect2(16 + i * 12, 38, 8, 8)
 		draw_rect(pip, COLOR_HP if i < player.hp else COLOR_DIM)
 
-	if player.dead:
-		var msg := "SYSTEM FAILURE - hold REWIND" if Rewind.can_rewind() else "SYSTEM FAILURE - press JUMP to reboot"
-		draw_string(font, Vector2(0, 180), msg, HORIZONTAL_ALIGNMENT_CENTER, size.x, 16, COLOR_HP)
-	else:
-		draw_string(font, Vector2(16, 348), "A/D move  SPACE jump  J slash  K dash  hold L rewind",
+	_draw_boss_bar(font)
+
+	var msg := ""
+	match Game.state:
+		Game.State.DOWN:
+			msg = "SYSTEM FAILURE - hold REWIND"
+		Game.State.GAME_OVER:
+			msg = "SYSTEM FAILURE - press JUMP to reboot"
+		Game.State.PAUSED:
+			msg = "PAUSED - ESC to resume"
+		Game.State.WON:
+			msg = "TIMELINE SECURED - press JUMP to play again"
+	if msg != "":
+		var color := COLOR_TIME if Game.state == Game.State.WON else COLOR_HP
+		draw_rect(Rect2(0, 160, size.x, 30), Color(0, 0, 0, 0.6))
+		draw_string(font, Vector2(0, 180), msg, HORIZONTAL_ALIGNMENT_CENTER, size.x, 16, color)
+	elif Game.checkpoint == 0 and player.position.x < 600:
+		draw_string(font, Vector2(16, 348), "A/D move  SPACE jump  J slash  K dash  hold L rewind  ESC pause",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 8, COLOR_DIM)
+
+
+func _draw_boss_bar(font: Font) -> void:
+	var boss := Game.boss
+	if boss == null or not is_instance_valid(boss) or boss.dormant or boss.dead:
+		return
+	var bar := Rect2(170, 336, 300, 5)
+	draw_string(font, Vector2(bar.position.x, bar.position.y - 4), Boss.NAME,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 8, COLOR_HP)
+	draw_rect(bar, COLOR_DIM)
+	draw_rect(Rect2(bar.position, Vector2(bar.size.x * float(boss.hp) / boss.max_hp, bar.size.y)), COLOR_HP)

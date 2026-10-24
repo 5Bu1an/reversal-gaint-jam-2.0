@@ -18,6 +18,8 @@ const MS_PER_FRAME := 1000.0 / 60.0
 
 var time_ms := START_MS
 var is_rewinding := false
+## Set false to pause history (e.g. while the player lies dead).
+var recording := true
 
 var _history: Array[Dictionary] = []
 var _undone: Array[Dictionary] = []
@@ -60,10 +62,13 @@ func reset() -> void:
 	_history.clear()
 	_undone.clear()
 	is_rewinding = false
+	recording = true
 	time_ms = START_MS
 
 
 func _record() -> void:
+	if not recording:
+		return
 	var frame := {}
 	for node in get_tree().get_nodes_in_group("rewindable"):
 		frame[node] = node.capture_state()
