@@ -245,30 +245,30 @@ func _showcase() -> Array:
 	var plan: Array = [[1, "god", ""]]
 	var say := func(f: int, text: String) -> void: plan.append([f, "caption", text])
 
-	say.call(2, "1/8  SLASH, RUN, JUMP  (J, A/D, hold Space)")
+	say.call(2, "1/10  SLASH, RUN, JUMP  (J, A/D, hold Space)")
 	for f in [20, 40, 60, 80]:
 		plan.append([f, "tap", "attack"])
 	plan.append_array([[90, "press", "move_right"], [98, "press", "jump"], [112, "release", "jump"],
 		[124, "press", "jump"], [138, "release", "jump"], [150, "release", "move_right"]])
 
-	say.call(150, "2/8  HOLD L: REWIND TIME\nthe timeline you undo keeps fighting as a red ghost")
+	say.call(150, "2/10  HOLD L: REWIND TIME\nthe timeline you undo keeps fighting as a red ghost")
 	plan.append_array([[160, "press", "rewind"], [220, "release", "rewind"]])
 
-	say.call(320, "3/8  PURPLE = INVERTED: your slashes bounce off")
+	say.call(320, "3/10  PURPLE = INVERTED: your slashes bounce off")
 	plan.append_array([[324, "clear_near", ""], [325, "stage_inverted", 470], [335, "tap", "attack"], [360, "tap", "attack"]])
 	say.call(385, "ECHO SLASH: hold J, release\nthe echo strikes again a moment later, as a ghost - and it lands")
 	plan.append_array([[390, "press", "attack"], [432, "release", "attack"], [500, "unstage_inverted", ""]])
 
-	say.call(510, "4/8  THORNS: lose 1 HP, back to the last safe ground")
+	say.call(510, "6/10  THORNS: lose 1 HP, back to the last safe ground")
 	plan.append_array([[512, "warp", 760], [520, "press", "jump"], [540, "release", "jump"]])
 	say.call(570, "tap jump for a short hop under them")
 	plan.append_array([[575, "tap", "jump"], [590, "tap", "jump"]])
 
-	say.call(610, "5/8  POGO: S + J in the air to bounce off enemies")
+	say.call(610, "7/10  POGO: S + J in the air to bounce off enemies")
 	plan.append_array([[612, "stage_pogo", Vector2(600, 316)], [613, "warp_xy", Vector2(600, 220)],
 		[614, "press", "move_down"], [624, "tap", "attack"], [662, "tap", "attack"], [700, "release", "move_down"]])
 
-	say.call(720, "6/8  WALL CLING + WALL JUMP\nhold toward a wall, Jump to kick off - a shard waits up the chimney")
+	say.call(720, "8/10  WALL CLING + WALL JUMP\nhold toward a wall, Jump to kick off - a shard waits up the chimney")
 	var w := 725
 	plan.append_array([[w - 6, "release", "move_down"], [w, "warp_xy", Vector2(2220, 268)], [w + 4, "press", "jump"],
 		[w + 6, "press", "move_left"], [w + 16, "release", "jump"]])
@@ -279,16 +279,19 @@ func _showcase() -> Array:
 			[f + 12, "release", "jump"]])
 	plan.append_array([[w + 200, "release", "move_left"], [w + 200, "release", "move_right"]])
 
-	say.call(990, "7/8  DEATH SHADE: die, and your time stays behind")
+	say.call(990, "9/10  DEATH SHADE: die, and your time stays behind")
 	plan.append_array([[992, "warp_xy", Vector2(2310, 316)], [993, "clear_near", ""], [995, "set_hp", 1], [1010, "spike_self", ""],
 		[1050, "tap", "jump"], [1060, "god", ""]])
 	say.call(1062, "reboot at the shrine... slash your shade to take the time back")
 	plan.append_array([[1070, "warp", 2282], [1071, "clear_near", ""], [1075, "press", "move_right"],
 		[1080, "release", "move_right"], [1110, "tap", "attack"], [1130, "tap", "attack"]])
 
-	say.call(1240, "8/8  BOSS: THE KURO SHOGUN")
+	say.call(1240, "10/10  BOSS: THE KURO SHOGUN")
 	plan.append([1242, "warp", 2680])
-	for f in range(1290, 1640, 20):
+	say.call(1275, "parry a quake and it rolls back into the Shogun")
+	plan.append_array([[1280, "boss_wave", 80.0], [1296, "tap", "attack"], [1300, "reflect_trace", ""],
+		[1380, "reflect_trace", ""]])
+	for f in range(1330, 1640, 20):
 		plan.append_array([[f, "face_boss", ""], [f + 1, "tap", "attack"]])
 	# It needs 2 s of its own history before it can rewind.
 	say.call(1415, "hit it too fast and it REWINDS ITSELF\nonly a ghost hit can interrupt it")
@@ -313,6 +316,30 @@ func _showcase() -> Array:
 	if "--trace_showcase" in OS.get_cmdline_user_args():
 		for f in range(500, 860, 15):
 			plan.append([f, "respawn_trace", ""])
+
+	# Nail arts and the parry slot in after the echo slash; everything from
+	# there on (steps, captions, shots, traces) moves back to make room.
+	const ARTS_AT := 505
+	const ARTS_LEN := 300
+	for step: Array in plan:
+		if step[0] >= ARTS_AT:
+			step[0] += ARTS_LEN
+	var a := ARTS_AT
+	say.call(a, "4/10  NAIL ARTS: hold J until the ring pulses, then...")
+	plan.append_array([[a + 4, "clear_near", ""], [a + 5, "warp_xy", Vector2(40, 316)],
+		[a + 6, "stage_grunt", Vector2(150, 316)], [a + 10, "press", "attack"]])
+	say.call(a + 45, "...press Dash: DASH SLASH")
+	plan.append_array([[a + 55, "tap", "dash"], [a + 60, "release", "attack"]])
+	say.call(a + 100, "...or let go holding up: CYCLONE SLASH")
+	plan.append_array([[a + 100, "warp_xy", Vector2(40, 316)], [a + 101, "stage_grunt", Vector2(66, 316)],
+		[a + 105, "press", "attack"], [a + 140, "press", "move_up"], [a + 145, "stage_grunt", Vector2(66, 316)],
+		[a + 151, "release", "attack"], [a + 160, "release", "move_up"]])
+	say.call(a + 195, "5/10  TIME-PARRY: strike just as a blow lands, and turn it back")
+	plan.append_array([[a + 200, "warp_xy", Vector2(40, 316)], [a + 201, "stage_grunt", Vector2(100, 316)],
+		[a + 202, "grunt_speed", 40.0], [a + 252, "tap", "attack"]])
+	plan.append_array([[a + 58, "shot", "05a_dash_slash"], [a + 156, "shot", "05b_cyclone"],
+		[a + 256, "shot", "05c_parry"], [a + 70, "grunt_trace", ""], [a + 170, "grunt_trace", ""],
+		[a + 251, "parry_trace", ""], [a + 262, "parry_trace", ""]])
 	return plan
 
 
@@ -399,6 +426,10 @@ func _physics_process(_delta: float) -> void:
 						e.position = step[2]
 						e.speed = 0.0
 						e.last_hit = ""
+						e.velocity = Vector2.ZERO
+						e.hurt_t = 0.0
+						e.ai = Enemy.Ai.WANDER
+						e.ai_t = Enemy.WANDER_TIME
 						break
 			"grunt_speed":
 				for e: Enemy in get_tree().get_nodes_in_group("enemies"):
