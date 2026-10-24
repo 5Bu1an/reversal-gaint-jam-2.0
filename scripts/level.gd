@@ -24,8 +24,12 @@ const SOLIDS: Array[Rect2] = [
 	Rect2(1400, 270, 80, 10),
 	Rect2(1560, 226, 80, 10),
 	Rect2(1720, 270, 80, 10),
-	# 4. Shrine
+	# 4. Shrine, with a side chimney above the first platform that only a
+	# wall-jumper can climb. The walls stop just above head height on the
+	# platform, so you walk in underneath and jump up between them.
 	Rect2(2180, 280, 80, 10),
+	Rect2(2184, 16, 12, 238),
+	Rect2(2244, 16, 12, 238),
 	Rect2(2330, 250, 80, 10),
 	# 5. Boss arena
 	Rect2(2700, 262, 72, 10),
@@ -35,14 +39,19 @@ const SPIKES: Array[Rect2] = [
 	Rect2(700, 320, 180, 8),
 	Rect2(950, 320, 140, 8),
 ]
-const SHARDS: Array[Vector2] = [Vector2(345, 222), Vector2(915, 236), Vector2(1600, 210), Vector2(2370, 236)]
+const SHARDS: Array[Vector2] = [
+	Vector2(345, 222), Vector2(915, 236), Vector2(1600, 210), Vector2(2370, 236),
+	Vector2(2220, 46), # top of the shrine chimney
+]
 
 ## Tutorial signs: position, then headline and detail lines.
 const HINTS := [
 	[Vector2(150, 150), ["HOLD L TO REWIND TIME", "the timeline you undo keeps fighting as a ghost"]],
+	[Vector2(470, 100), ["OR HOLD J, THEN RELEASE", "echo slash: the echo strikes again, like a ghost"]],
 	[Vector2(470, 150), ["PURPLE = INVERTED", "your blade bounces off - swing, then rewind", "your ghost's swings land"]],
 	[Vector2(650, 150), ["S + J IN THE AIR TO POGO", "bounce off enemies to cross the spikes"]],
 	[Vector2(1230, 150), ["HITS REFILL YOUR TIME", "so do time shards"]],
+	[Vector2(2110, 120), ["HOLD TOWARD A WALL TO CLING", "jump to kick off - something waits up the chimney"]],
 	[Vector2(2480, 150), ["THE SHOGUN BENDS TIME TOO", "jump the shockwaves"]],
 ]
 
@@ -111,6 +120,12 @@ func _ready() -> void:
 	add_child(boss)
 	Game.boss = boss
 	_arena(BOSS_ARENA_TRIGGER, BOSS_ARENA_GATES, [[boss]])
+
+	if not Game.shade.is_empty():
+		var shade := Shade.new()
+		shade.position = Game.shade.pos
+		shade.ms = Game.shade.ms
+		add_child(shade)
 
 	_ghosts.name = "Ghosts"
 	add_child(_ghosts)

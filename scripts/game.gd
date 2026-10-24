@@ -6,6 +6,7 @@ extends Node
 ##   Game.checkpoint_reached.connect(...)           # "checkpoint" toast
 ##   Game.boss                                      # Boss node or null; read .hp / .max_hp
 ##   Game.stats                                     # time, deaths, rewinds, rewound_ms
+##   Game.shade                                     # {pos, ms} of lost time, or {}
 ##   Game.restart() / Game.new_game() / Game.set_paused(bool)
 
 enum State { PLAYING, PAUSED, DOWN, GAME_OVER, WON }
@@ -19,6 +20,9 @@ var state := State.PLAYING
 var boss: Boss
 ## This run's numbers, kept across checkpoint retries, cleared by new_game().
 var stats := {}
+## Time lost at the last real death, waiting at {pos, ms}; {} when none.
+## Lives here so it survives the scene reload.
+var shade := {}
 
 
 func _ready() -> void:
@@ -50,7 +54,8 @@ func _process(_delta: float) -> void:
 		elif state == State.PAUSED:
 			set_paused(false)
 	elif Input.is_action_just_pressed("jump"):
-		if state == State.GAME_OVER:
+		# While down you can still rewind, or give up and reboot.
+		if state == State.GAME_OVER or state == State.DOWN:
 			restart()
 		elif state == State.WON:
 			new_game()
@@ -88,8 +93,12 @@ func win() -> void:
 	get_tree().current_scene.add_child(layer)
 
 
-## Retry from the last checkpoint.
+## Retry from the last checkpoint. After a real death, the time left on the
+## bar stays behind as the shade (replacing any older one).
 func restart() -> void:
+	if state == State.DOWN or state == State.GAME_OVER:
+		var player: Player = get_tree().get_first_node_in_group("player")
+		shade = {"pos": player.shade_spot(), "ms": Rewind.time_ms} if player and Rewind.time_ms >= 1.0 else {}
 	get_tree().paused = false
 	Engine.time_scale = 1.0
 	set_state(State.PLAYING)
@@ -98,5 +107,6 @@ func restart() -> void:
 
 func new_game() -> void:
 	checkpoint = 0
+	shade = {}
 	_reset_stats()
 	restart()
