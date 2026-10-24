@@ -1,7 +1,9 @@
 class_name Enemy
 extends CharacterBody2D
-## Patrolling corporate grunt, and the base class for every other enemy. Walks
-## until it hits a wall or a ledge, then turns. Dead enemies stay in the tree
+## Corporate grunt, and the base class for every other enemy. Behaves like a
+## Hollow Knight husk: wanders and pauses, turns at walls and ledges, and when
+## it notices you it winds up (eye flashes), charges, then stops to recover. A
+## hit staggers it. Dead enemies stay in the tree
 ## (hidden) so a rewind can revive them; dormant ones wait for an arena wave.
 ##
 ## Subclasses set their stats in _init() and override _act() and _draw_body().
@@ -13,6 +15,17 @@ const GRAVITY := 980.0
 const MAX_FALL := 420.0
 const HURT_TIME := 0.2
 const SPAWN_TIME := 0.5
+
+enum Ai { WANDER, PAUSE, WINDUP, CHARGE, RECOVER }
+const WANDER_TIME := 2.4
+const PAUSE_TIME := 0.9
+const NOTICE_RANGE := 110.0
+const NOTICE_HEIGHT := 30.0
+const WINDUP_TIME := 0.45
+const RUSH_TIME := 0.9
+const CHARGE_MULT := 3.0
+const RECOVER_TIME := 0.7
+const STAGGER_TIME := 0.4
 
 const COLOR_BODY := Color("#05d9e8")
 const COLOR_EYE := Color("#ff2a6d")
@@ -35,6 +48,8 @@ var spawn_t := 0.0
 var last_hit := ""
 ## Only ghost swings can hurt it.
 var inverted := false
+var ai := Ai.WANDER
+var ai_t := WANDER_TIME
 
 
 func _ready() -> void:
@@ -64,11 +79,53 @@ func _act(delta: float) -> void:
 	velocity.y = minf(velocity.y + GRAVITY * delta, MAX_FALL)
 	if hurt_t > 0.0:
 		velocity.x = move_toward(velocity.x, 0.0, 800.0 * delta)
-	else:
-		velocity.x = dir * speed
+		move_and_slide()
+		return
+	ai_t -= delta
+	match ai:
+		Ai.WANDER, Ai.PAUSE:
+			velocity.x = dir * speed if ai == Ai.WANDER else 0.0
+			if _sees_player():
+				_set_ai(Ai.WINDUP, WINDUP_TIME)
+			elif ai_t <= 0.0 and ai == Ai.WANDER:
+				_set_ai(Ai.PAUSE, PAUSE_TIME)
+			elif ai_t <= 0.0:
+				_set_ai(Ai.WANDER, WANDER_TIME)
+		Ai.WINDUP:
+			velocity.x = 0.0
+			if ai_t <= 0.0:
+				_set_ai(Ai.CHARGE, RUSH_TIME)
+		Ai.CHARGE:
+			velocity.x = dir * speed * CHARGE_MULT
+			if ai_t <= 0.0:
+				_set_ai(Ai.RECOVER, RECOVER_TIME)
+		Ai.RECOVER:
+			velocity.x = move_toward(velocity.x, 0.0, 600.0 * delta)
+			if ai_t <= 0.0:
+				_set_ai(Ai.WANDER, WANDER_TIME)
 	move_and_slide()
-	if hurt_t <= 0.0 and (is_on_wall() or (is_on_floor() and not _ground_ahead())):
+	var blocked := is_on_wall() or (is_on_floor() and not _ground_ahead())
+	if blocked and ai == Ai.CHARGE:
+		_set_ai(Ai.RECOVER, RECOVER_TIME)
+	elif blocked and ai == Ai.WANDER:
 		dir = -dir
+
+
+func _set_ai(state: Ai, time: float) -> void:
+	ai = state
+	ai_t = time
+
+
+## Noticing turns it to face you.
+func _sees_player() -> bool:
+	var player: Player = get_tree().get_first_node_in_group("player")
+	if player == null or player.dead:
+		return false
+	var dx := player.position.x - position.x
+	if absf(dx) > NOTICE_RANGE or absf(player.position.y - position.y) > NOTICE_HEIGHT:
+		return false
+	dir = 1 if dx > 0.0 else -1
+	return true
 
 
 func activate() -> void:
@@ -102,6 +159,7 @@ func take_hit(key: String, from_dir: Vector2) -> bool:
 		return false
 	hp -= 1
 	hurt_t = HURT_TIME
+	_set_ai(Ai.RECOVER, STAGGER_TIME)
 	if from_dir.x != 0.0:
 		velocity.x = from_dir.x * knockback
 	Sfx.play("hit")
@@ -141,13 +199,17 @@ func _draw() -> void:
 func _draw_body(body: Color) -> void:
 	draw_rect(Rect2(-size / 2, size), body)
 	var eye_x := 2.0 if dir > 0 else -6.0
-	draw_rect(Rect2(eye_x, -6, 4, 3), COLOR_BODY if inverted else COLOR_EYE)
+	var eye := COLOR_BODY if inverted else COLOR_EYE
+	if ai == Ai.WINDUP and int(ai_t * 20.0) % 2 == 0:
+		eye = Color.WHITE
+	draw_rect(Rect2(eye_x, -6, 4, 3), eye)
 
 
 func capture_state() -> Dictionary:
 	return {
 		"position": position, "velocity": velocity, "hp": hp, "dead": dead, "dormant": dormant,
 		"dir": dir, "hurt_t": hurt_t, "spawn_t": spawn_t, "last_hit": last_hit, "inverted": inverted,
+		"ai": ai, "ai_t": ai_t,
 	}
 
 

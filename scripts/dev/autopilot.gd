@@ -156,7 +156,8 @@ func _make_plan(plan_name: String) -> Array:
 				[340, "tap", "jump"], [350, "shade_trace", ""], [360, "quit", ""]]
 		"echo":
 			# Timed so the inverted grunt walks into range just as the echo lands.
-			plan = [[1, "god", ""], [1, "warp", 470], [15, "press", "attack"], [55, "shot", "1_charged"],
+			# Grunts now notice and charge you, so hold this one in range.
+			plan = [[1, "god", ""], [1, "stage_inverted", 470], [15, "press", "attack"], [55, "shot", "1_charged"],
 				[60, "release", "attack"], [75, "shot", "2_echo_waiting"], [91, "shot", "3_echo_hit"], [120, "quit", ""]]
 			for f in [14, 59, 61, 89, 92, 118]:
 				plan.append([f, "trace", ""])
@@ -191,6 +192,11 @@ func _make_plan(plan_name: String) -> Array:
 			for i in 10:
 				plan += [[1 + i * 50, "warp_xy", Vector2(160 + i * 320, 200)], [40 + i * 50, "shot", "screen_%02d" % i]]
 			plan.append([510, "quit", ""])
+		"husk":
+			# Stand near the first grunt: it should notice, wind up, charge, recover.
+			plan = [[1, "god", ""], [1, "warp_xy", Vector2(170, 316)], [200, "quit", ""]]
+			for f in range(2, 200, 8):
+				plan.append([f, "grunt_trace", ""])
 		"win":
 			plan = [[1, "god", ""], [250, "warp", 2680], [255, "press", "move_right"], [260, "kill_boss", ""],
 				[300, "shot", "1_portal_open"], [600, "shot", "2_won"], [620, "quit", ""]]
@@ -269,6 +275,9 @@ func _showcase() -> Array:
 	for f in [1419, 1440, 1500, 1530, 1560, 1600]:
 		plan.append([f, "boss_trace", ""])
 	plan.append_array([[1072, "shade_trace", ""], [1140, "shade_trace", ""], [1820, "quit_if_shots", ""]])
+	if "--trace_showcase" in OS.get_cmdline_user_args():
+		for f in range(500, 860, 15):
+			plan.append([f, "respawn_trace", ""])
 	return plan
 
 
@@ -358,6 +367,16 @@ func _physics_process(_delta: float) -> void:
 					grunt.hp = grunt.max_hp
 					grunt.position = step[2]
 					grunt.speed = 0.0
+			"respawn_trace":
+				var p: Player = get_tree().get_first_node_in_group("player")
+				print("[rs] frame=%d pos=(%d,%d) hp=%d respawn_t=%.2f safe=%s invuln=%.2f scale=%.2f" % [
+					_frame, p.position.x, p.position.y, p.hp, p.respawn_t, p.safe_pos, p.invuln_t, Engine.time_scale])
+			"grunt_trace":
+				for e: Enemy in get_tree().get_nodes_in_group("enemies"):
+					if e.get_script() == Enemy and not e.inverted:
+						print("[grunt] frame=%d x=%d vx=%.0f ai=%s ai_t=%.2f dir=%d" % [
+							_frame, e.position.x, e.velocity.x, Enemy.Ai.keys()[e.ai], e.ai_t, e.dir])
+						break
 			"warp_xy":
 				var p: Player = get_tree().get_first_node_in_group("player")
 				p.position = step[2]

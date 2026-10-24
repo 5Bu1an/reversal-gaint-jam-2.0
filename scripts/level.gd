@@ -75,7 +75,7 @@ const PORTAL := Rect2(3130, 276, 30, 52)
 const MIN_GHOST_FRAMES := 6
 ## Camera leads the way you're facing.
 const LOOKAHEAD := 48.0
-const LOOKAHEAD_SPEED := 2.5
+const LOOKAHEAD_SPEED := 1.5
 
 const COLOR_WALL := Color("#1a1a2e")
 const COLOR_EDGE := Color("#05d9e8")
@@ -160,7 +160,8 @@ func _ready() -> void:
 	_camera.limit_top = 0
 	_camera.limit_bottom = 360
 	_camera.position_smoothing_enabled = true
-	_camera.position_smoothing_speed = 7.0
+	# A slow glide rather than a snap.
+	_camera.position_smoothing_speed = 4.5
 	player.add_child(_camera)
 	_camera.reset_smoothing.call_deferred()
 	_camera.add_child(preload("res://scripts/scenery/rain.gd").new())

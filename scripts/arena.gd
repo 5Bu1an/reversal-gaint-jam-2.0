@@ -7,6 +7,8 @@ extends Node2D
 enum Phase { WAITING, FIGHTING, CLEARED }
 
 const COLOR_GATE := Color("#ff2a6d")
+## Breather between waves.
+const WAVE_GAP := 1.0
 
 var trigger := Rect2()
 var gates: Array[Rect2] = []
@@ -14,6 +16,8 @@ var waves: Array = [] # Array of Array[Enemy]
 
 var phase := Phase.WAITING
 var wave := 0
+## Counts down the breather before the next wave starts.
+var gap_t := 0.0
 
 var _gate_shapes: Array[CollisionShape2D] = []
 
@@ -45,7 +49,7 @@ func _ready() -> void:
 		_gate_shapes.append(shape)
 
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	queue_redraw()
 	if not _gate_shapes.is_empty() and _gate_shapes[0].disabled == _gates_closed():
 		_sync_gates() # god mode was toggled
@@ -61,14 +65,18 @@ func _physics_process(_delta: float) -> void:
 				_sync_gates()
 				Sfx.play("gate")
 		Phase.FIGHTING:
-			if waves[wave].all(func(e: Enemy) -> bool: return e.dead):
+			if gap_t > 0.0:
+				gap_t -= delta
+				if gap_t <= 0.0:
+					_start_wave()
+			elif waves[wave].all(func(e: Enemy) -> bool: return e.dead):
 				wave += 1
 				if wave >= waves.size():
 					phase = Phase.CLEARED
 					_sync_gates()
 					Sfx.play("gate", 0.0, 0.0)
 				else:
-					_start_wave()
+					gap_t = WAVE_GAP
 
 
 func is_fighting() -> bool:
@@ -102,12 +110,13 @@ func _draw() -> void:
 
 
 func capture_state() -> Dictionary:
-	return {"phase": phase, "wave": wave}
+	return {"phase": phase, "wave": wave, "gap_t": gap_t}
 
 
 func apply_state(state: Dictionary) -> void:
 	var was := phase
 	phase = state.phase
 	wave = state.wave
+	gap_t = state.gap_t
 	if phase != was:
 		_sync_gates()

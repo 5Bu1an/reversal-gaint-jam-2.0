@@ -6,10 +6,10 @@ extends Enemy
 enum Mode { HOVER, AIM, DIVE, RETURN }
 
 const SIGHT := 170.0
-const AIM_TIME := 0.45
-const DIVE_SPEED := 260.0
-const DIVE_TIME := 0.7
-const REST_TIME := 1.2
+const AIM_TIME := 0.7
+const DIVE_SPEED := 200.0
+const DIVE_TIME := 0.8
+const REST_TIME := 2.0
 
 var home := Vector2.ZERO
 var mode := Mode.HOVER
