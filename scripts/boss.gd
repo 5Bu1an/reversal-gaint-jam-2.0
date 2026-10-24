@@ -58,7 +58,7 @@ var reverse_t := 0.0
 
 
 func _init() -> void:
-	size = Vector2(30, 44)
+	size = Vector2(42, 60)
 	speed = 55.0
 	max_hp = 24
 	knockback = 0.0
@@ -100,6 +100,7 @@ func _act(delta: float) -> void:
 			if mode_t <= 0.0:
 				attacks += 1
 				mode = Mode.WINDUP_CHARGE if attacks % 2 == 1 else Mode.WINDUP_SLAM
+				Fx.telegraph(position + Vector2(dir * size.x * 0.25, -size.y * 0.3), 18.0)
 				mode_t = 0.55 * pace
 		Mode.WINDUP_CHARGE:
 			velocity.x = 0.0
@@ -132,6 +133,7 @@ func _act(delta: float) -> void:
 		waves.append(Vector3(position.x - size.x / 2, floor_y, -1))
 		waves.append(Vector3(position.x + size.x / 2, floor_y, 1))
 		Sfx.play("boss_slam")
+		Fx.ground_crack(Vector2(position.x, floor_y - 2.0), COLOR_TRIM)
 		Fx.shake(2.5)
 		Fx.dust(Vector2(position.x - size.x / 2, floor_y), 6)
 		Fx.dust(Vector2(position.x + size.x / 2, floor_y), 6)
@@ -158,6 +160,10 @@ func _act(delta: float) -> void:
 
 func _wave_rect(w: Vector3) -> Rect2:
 	return Rect2(w.x - WAVE_SIZE.x / 2, w.y - WAVE_SIZE.y, WAVE_SIZE.x, WAVE_SIZE.y)
+
+
+func blood_color() -> Color:
+	return COLOR_INVERTED if inverted else COLOR_TRIM
 
 
 func parried(rect: Rect2, _from: Vector2) -> void:
@@ -213,10 +219,13 @@ func _recover(time: float) -> void:
 	mode_t = time
 
 
+## Its body hurts while it charges or leaps; shockwaves always do.
 func damage_rects() -> Array[Rect2]:
 	if not is_active():
 		return []
-	var rects: Array[Rect2] = [hurt_rect()]
+	var rects: Array[Rect2] = []
+	if mode == Mode.CHARGE or mode == Mode.AIR:
+		rects.append(hurt_rect())
 	for w in waves:
 		rects.append(_wave_rect(w))
 	return rects
@@ -236,6 +245,8 @@ func take_hit(key: String, from_dir: Vector2, damage := 1) -> bool:
 		Fx.hit_stop(0.35)
 		Fx.shake(6.0)
 		Fx.burst(position, COLOR_GOLD, 24, 220.0)
+		Fx.kill(position, from_dir, COLOR_GOLD)
+		Fx.enemy_kill(position, from_dir, COLOR_TRIM, size)
 	return landed
 
 
@@ -252,11 +263,6 @@ func _draw_body(body: Color) -> void:
 	draw_colored_polygon(PackedVector2Array([
 		Vector2(half.x, -half.y), Vector2(half.x + 8, -half.y - 12), Vector2(half.x - 6, -half.y),
 	]), COLOR_GOLD)
-	if mode == Mode.REVERSING:
-		# Afterimages along the path it's about to rewind through.
-		for j in range(reverse_path.size() - 1, -1, -3):
-			var ghost_pos := Vector2(reverse_path[j].x, reverse_path[j].y) - position
-			draw_rect(Rect2(ghost_pos - half, size), Color(COLOR_INVERTED, 0.25), false, 1.0)
 	var winding := mode == Mode.WINDUP_CHARGE or mode == Mode.WINDUP_SLAM
 	var visor := Color.WHITE if winding and int(mode_t * 20.0) % 2 == 0 else trim
 	var visor_x := 0.0 if dir > 0 else -half.x
@@ -264,13 +270,44 @@ func _draw_body(body: Color) -> void:
 	if mode == Mode.CHARGE:
 		draw_line(Vector2(-dir * half.x, -6), Vector2(-dir * (half.x + 18), -6), COLOR_TRIM, 2.0)
 		draw_line(Vector2(-dir * half.x, 8), Vector2(-dir * (half.x + 12), 8), COLOR_TRIM, 2.0)
-	for list: Array in [waves, reflected]:
-		for w: Vector3 in list:
-			var base := Vector2(w.x, w.y) - position
-			draw_colored_polygon(PackedVector2Array([
-				base + Vector2(-WAVE_SIZE.x / 2, 0), base + Vector2(0, -WAVE_SIZE.y),
-				base + Vector2(WAVE_SIZE.x / 2, 0),
-			]), COLOR_TRIM if list == waves else Ghost.COLOR)
+
+
+## Crouches and leans back for wind-ups, leans into the charge, stretches up
+## out of a leap and slams flat on landing.
+func _pose() -> Array:
+	match mode:
+		Mode.STALK:
+			return [Vector2(0, -absf(sin(_anim_t * 7.0)) * 1.5), 0.0, Vector2.ONE]
+		Mode.WINDUP_CHARGE, Mode.WINDUP_SLAM:
+			var k := 1.0 - clampf(mode_t / 0.55, 0.0, 1.0)
+			return [Vector2.ZERO, -dir * 0.12 * k, Vector2(1.0 + 0.18 * k, 1.0 - 0.18 * k)]
+		Mode.CHARGE:
+			return [Vector2.ZERO, dir * 0.1, Vector2(1.12, 0.92)]
+		Mode.AIR:
+			return [Vector2.ZERO, 0.0, Vector2(0.85, 1.2) if velocity.y < 0.0 else Vector2(1.05, 0.95)]
+		Mode.RECOVER:
+			var k := clampf(mode_t / 0.6, 0.0, 1.0)
+			return [Vector2.ZERO, 0.0, Vector2(1.0 + 0.15 * k, 1.0 - 0.15 * k)]
+	return [Vector2.ZERO, 0.0, Vector2.ONE]
+
+
+## Shockwaves and rewind afterimages live in the world, so they don't lean
+## and stretch with the body.
+func _draw_extra() -> void:
+	var half := size / 2
+	if mode == Mode.REVERSING:
+		# Afterimages along the path it's about to rewind through.
+		for j in range(reverse_path.size() - 1, -1, -3):
+			var ghost_pos := Vector2(reverse_path[j].x, reverse_path[j].y) - position
+			draw_rect(Rect2(ghost_pos - half, size), Color(COLOR_INVERTED, 0.25), false, 1.0)
+	for i in waves.size() + reflected.size():
+		var is_reflected := i >= waves.size()
+		var w: Vector3 = reflected[i - waves.size()] if is_reflected else waves[i]
+		var base := Vector2(w.x, w.y) - position
+		draw_colored_polygon(PackedVector2Array([
+			base + Vector2(-WAVE_SIZE.x / 2, 0), base + Vector2(0, -WAVE_SIZE.y),
+			base + Vector2(WAVE_SIZE.x / 2, 0),
+		]), Ghost.COLOR if is_reflected else COLOR_TRIM)
 
 
 func capture_state() -> Dictionary:

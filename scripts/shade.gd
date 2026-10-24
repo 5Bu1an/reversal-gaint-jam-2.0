@@ -47,7 +47,7 @@ func take_hit(key: String, _from_dir: Vector2, _damage := 1) -> bool:
 	dead = true
 	Rewind.add_time(ms)
 	Game.shade = {}
-	Fx.burst(position, Ghost.COLOR, 16, 150.0)
+	Fx.kill(position, Vector2.UP, Ghost.COLOR)
 	Sfx.play("shard")
 	return false
 
