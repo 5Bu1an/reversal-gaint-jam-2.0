@@ -17,10 +17,13 @@ fights alongside you.
 | --- | --- |
 | Move | A / D or ← / → |
 | Look up / down | W / S or ↑ / ↓ |
-| Jump | Space or Z |
+| Jump (hold to go higher, tap for a short hop) | Space or Z |
+| Wall cling / wall jump | In the air, hold toward a wall; Jump to kick off |
 | Attack | J or X |
+| Echo slash (hits again 0.5 s later, as a ghost) | Hold J or X ~0.6 s, release |
 | Dash | K or C |
 | Rewind (hold) | L or Shift |
+| Reboot after dying (lose your time to a shade) | Jump while down |
 
 ## Web build (itch.io)
 

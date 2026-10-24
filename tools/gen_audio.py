@@ -160,6 +160,12 @@ def effects():
         voice(0.25, 1400, "tri", decay=14, vol=0.35, vibrato=0.01, vib_rate=40),
         voice(0.25, 2100, "sine", decay=18, vol=0.25),
         noise(0.03, decay=90, vol=0.3)))
+    save("charge", mix(
+        voice(0.5, glide(300, 1200, 0.45, 1.5), "saw", decay=2, attack=0.05, vol=0.25, vibrato=0.02, vib_rate=18),
+        voice(0.5, glide(600, 2400, 0.45, 1.5), "sine", decay=3, attack=0.05, vol=0.15)))
+    save("boss_rewind", mix(
+        voice(0.7, glide(90, 420, 0.65, 2.0), "saw", decay=2, attack=0.2, vol=0.45, vibrato=0.08, vib_rate=9),
+        noise(0.7, decay=2, vol=0.3, cutoff=glide(300, 4000, 0.65), attack=0.2)))
     save("ui_move", voice(0.05, 660, "pulse", decay=40, vol=0.25))
     save("ui_select", seq(
         (0.0, voice(0.08, 660, "pulse", decay=25, vol=0.3)),

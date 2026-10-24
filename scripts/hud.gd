@@ -166,7 +166,7 @@ func _draw_message(font: Font, player: Player) -> void:
 	var msg := ""
 	match Game.state:
 		Game.State.DOWN:
-			msg = "SYSTEM FAILURE  -  hold REWIND"
+			msg = "SYSTEM FAILURE  -  hold REWIND or press JUMP to reboot"
 		Game.State.GAME_OVER:
 			msg = "SYSTEM FAILURE  -  press JUMP to reboot"
 		Game.State.PAUSED:
