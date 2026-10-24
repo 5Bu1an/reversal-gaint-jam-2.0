@@ -69,6 +69,7 @@ func win() -> void:
 ## Retry from the last checkpoint.
 func restart() -> void:
 	get_tree().paused = false
+	Engine.time_scale = 1.0
 	set_state(State.PLAYING)
 	get_tree().reload_current_scene()
 

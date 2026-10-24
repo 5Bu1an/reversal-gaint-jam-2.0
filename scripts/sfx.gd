@@ -23,6 +23,7 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	for i in VOICES:
 		var player := AudioStreamPlayer.new()
+		player.process_mode = Node.PROCESS_MODE_PAUSABLE # effects pause with the game
 		add_child(player)
 		_voices.append(player)
 	_music.volume_db = MUSIC_DB

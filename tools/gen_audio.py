@@ -156,6 +156,10 @@ def effects():
     save("boss_slam", mix(
         voice(0.7, glide(90, 32, 0.6), "sine", decay=5, vol=0.9),
         noise(0.6, decay=7, vol=0.6, cutoff=glide(2000, 120, 0.5))))
+    save("deflect", mix(
+        voice(0.25, 1400, "tri", decay=14, vol=0.35, vibrato=0.01, vib_rate=40),
+        voice(0.25, 2100, "sine", decay=18, vol=0.25),
+        noise(0.03, decay=90, vol=0.3)))
     save("ui_move", voice(0.05, 660, "pulse", decay=40, vol=0.25))
     save("ui_select", seq(
         (0.0, voice(0.08, 660, "pulse", decay=25, vol=0.3)),

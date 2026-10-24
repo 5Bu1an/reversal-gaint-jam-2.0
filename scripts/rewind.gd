@@ -1,7 +1,9 @@
 extends Node
 ## Autoload "Rewind". Records every node in the "rewindable" group once per
 ## physics frame and, while the rewind action is held, plays those frames back
-## in reverse. Each rewound frame drains the time bar.
+## in reverse. Each rewound frame drains the time bar; once it's empty you
+## can't rewind until you earn time back by playing (hits, shards, and a slow
+## trickle while you're alive).
 ##
 ## Rewindable nodes implement capture_state() -> Dictionary and
 ## apply_state(state: Dictionary), and skip their own physics while
@@ -15,6 +17,8 @@ const MAX_MS := 5000.0
 const START_MS := 2000.0
 const MAX_FRAMES := 300 # 5 s of history at 60 Hz
 const MS_PER_FRAME := 1000.0 / 60.0
+## Passive gain: 10 s of play earns back 1 s of rewind.
+const REGEN_MS_PER_FRAME := MS_PER_FRAME / 10.0
 
 var time_ms := START_MS
 var is_rewinding := false
@@ -47,6 +51,8 @@ func _physics_process(_delta: float) -> void:
 		is_rewinding = false
 		rewind_ended.emit(_undone.duplicate())
 		_undone.clear()
+	if recording:
+		add_time(REGEN_MS_PER_FRAME)
 	_record()
 
 

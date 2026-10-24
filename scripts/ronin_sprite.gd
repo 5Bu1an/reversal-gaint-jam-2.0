@@ -50,12 +50,16 @@ static func pick(state: Dictionary) -> String:
 	return "run" if absf(state.velocity.x) > 10.0 else "idle"
 
 
-func _ready() -> void:
+## Set up here rather than in _ready so show_state works before the sprite
+## enters the tree (the ghost shows its first frame during setup).
+func _init() -> void:
 	sprite_frames = frames()
 	centered = false
-	# Line the sheet's feet up with the bottom of the player's collision box.
+	# Pivot at the feet (bottom of the player's collision box) so squash and
+	# stretch keep them planted.
 	var meta: Dictionary = META.data
-	position = Vector2(-int(meta.cell) / 2, Player.SIZE.y / 2 - int(meta.feet_y))
+	position = Vector2(0, Player.SIZE.y / 2)
+	offset = Vector2(-int(meta.cell) / 2, -int(meta.feet_y))
 	animation_finished.connect(func() -> void: _landing = false)
 	play("idle")
 

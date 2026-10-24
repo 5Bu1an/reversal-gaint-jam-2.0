@@ -22,6 +22,20 @@ fights alongside you.
 | Dash | K or C |
 | Rewind (hold) | L or Shift |
 
+## Web build (itch.io)
+
+Needs Godot's 4.7.2 export templates once per machine (Editor → Manage Export
+Templates → Download). Then:
+
+```bash
+godot --headless --path . --export-release "Web" export/web/index.html
+cd export/web && zip -r ../tenet-web.zip . && cd -
+```
+
+Upload `export/tenet-web.zip` to itch.io as an HTML game ("This file will be
+played in the browser"), viewport 1280×720. The build is single-threaded, so
+SharedArrayBuffer support is not needed.
+
 ## Folders
 
 - `scripts/`, `scenes/` — code and scenes (Arjun + Claude)
