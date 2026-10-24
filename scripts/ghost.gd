@@ -5,6 +5,8 @@ extends Node2D
 
 const COLOR := Color("#ff3b3b")
 const FADE_TIME := 0.3
+const ALPHA := 0.6
+const FADE_IN := 8 # frames
 
 static var _serial := 0
 
@@ -30,11 +32,12 @@ func _physics_process(delta: float) -> void:
 		return
 	if _index >= _frames.size():
 		_fade -= delta
-		modulate.a = 0.6 * maxf(_fade / FADE_TIME, 0.0)
+		modulate.a = ALPHA * maxf(_fade / FADE_TIME, 0.0)
 		if _fade <= 0.0:
 			queue_free()
 		return
 	_show_frame(_index)
+	modulate.a = ALPHA * minf(float(_index + 1) / FADE_IN, 1.0)
 	var frame := _frames[_index]
 	if frame.attack_t > 0.0 and not frame.dead:
 		var rect := Player.attack_rect(frame.position, frame.attack_dir)

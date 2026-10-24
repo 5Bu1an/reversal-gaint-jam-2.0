@@ -19,7 +19,7 @@ var bob := 0.0
 
 
 func _init() -> void:
-	size = Vector2(24, 15)
+	size = Vector2(34, 30)
 	speed = 90.0
 	max_hp = 2
 	knockback = 70.0
@@ -93,8 +93,39 @@ func _pose() -> Array:
 	return [Vector2(0, sin(_anim_t * 4.0) * 1.5), tilt, Vector2.ONE]
 
 
+## A faint cyan halo so the dark orb reads against the night sky.
 func _draw_extra() -> void:
-	pass
+	if dead or dormant:
+		return
+	var glow := 0.14 + (0.12 if mode == Mode.AIM else 0.0)
+	draw_circle(Vector2(0, -6), 26.0, Color(0.3, 0.95, 1.0, glow * 0.5))
+	draw_circle(Vector2(0, -6), 16.0, Color(0.3, 0.95, 1.0, glow))
+
+
+## Drones blow apart.
+func _death_fx(_from_dir: Vector2) -> void:
+	Fx.sprite_fx("warm_explosion", position, 0.75)
+	Fx.shake(3.0)
+
+
+## Vivicat's drone at 0.6x: a dark orb with a cyan eye.
+func _make_sprite() -> AnimatedSprite2D:
+	var frames := Sheet.grid("res://assets/art/enemies/drone.png", Vector2i(96, 96), {
+		"idle": [4, 6, 10.0, true], "fly": [3, 5, 12.0, true], "aim": [0, 8, 14.0, false],
+		"hurt": [2, 4, 14.0, false], "death": [1, 12, 18.0, false],
+	})
+	return _new_sprite(frames, Vector2(55, 72), 0.6)
+
+
+func _sprite_anim() -> String:
+	if hurt_t > 0.0:
+		return "hurt"
+	match mode:
+		Mode.AIM:
+			return "aim"
+		Mode.DIVE, Mode.RETURN:
+			return "fly"
+	return "idle"
 
 
 func _draw_body(body: Color) -> void:

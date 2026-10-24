@@ -15,6 +15,15 @@ var _t := 0.0
 var _sprite := RoninSprite.new()
 
 
+## The shade draws itself as the player's ghost, not an enemy sprite.
+func _make_sprite() -> AnimatedSprite2D:
+	return null
+
+
+func show_health_bar() -> bool:
+	return false
+
+
 func _init() -> void:
 	size = Vector2(12, 24)
 	max_hp = 1

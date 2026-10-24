@@ -19,12 +19,18 @@ const MAX_FRAMES := 300 # 5 s of history at 60 Hz
 const MS_PER_FRAME := 1000.0 / 60.0
 ## Passive gain: 10 s of play earns back 1 s of rewind.
 const REGEN_MS_PER_FRAME := MS_PER_FRAME / 10.0
+## A rewind needs at least this much time to start, and once the bar runs dry
+## mid-rewind you have to let go before rewinding again. Without this, holding
+## the key on an empty bar kept restarting a one-frame rewind every time the
+## trickle refilled a sliver, flickering the effect and wiping ghosts.
+const MIN_START_MS := 150.0
 
 var time_ms := START_MS
 var is_rewinding := false
 ## Set false to pause history (e.g. while the player lies dead).
 var recording := true
 
+var _needs_release := false
 var _history: Array[Dictionary] = []
 var _undone: Array[Dictionary] = []
 
@@ -35,7 +41,11 @@ func _ready() -> void:
 
 
 func _physics_process(_delta: float) -> void:
-	var wants_rewind := Input.is_action_pressed("rewind") and time_ms > 0.0 and not _history.is_empty()
+	var held := Input.is_action_pressed("rewind")
+	if not held:
+		_needs_release = false
+	var enough := time_ms > 0.0 if is_rewinding else time_ms >= MIN_START_MS
+	var wants_rewind := held and not _needs_release and enough and not _history.is_empty()
 	if wants_rewind:
 		if not is_rewinding:
 			is_rewinding = true
@@ -49,6 +59,7 @@ func _physics_process(_delta: float) -> void:
 
 	if is_rewinding:
 		is_rewinding = false
+		_needs_release = held
 		rewind_ended.emit(_undone.duplicate())
 		_undone.clear()
 	if recording:
@@ -61,13 +72,14 @@ func add_time(ms: float) -> void:
 
 
 func can_rewind() -> bool:
-	return time_ms > 0.0 and not _history.is_empty()
+	return time_ms >= MIN_START_MS and not _history.is_empty()
 
 
 func reset() -> void:
 	_history.clear()
 	_undone.clear()
 	is_rewinding = false
+	_needs_release = false
 	recording = true
 	time_ms = START_MS
 

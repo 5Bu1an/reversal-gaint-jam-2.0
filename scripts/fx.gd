@@ -21,6 +21,7 @@ extends Node
 ##   Fx.deflect(pos, color)          # a blade bouncing off: ring and flare
 ##   Fx.spawn_in(pos, color)         # an enemy warping in
 ##   Fx.ground_crack(pos, color)     # streaks racing along the floor from a slam
+##   Fx.sprite_fx(name, pos, ...)    # a PVFX Foundry sprite effect (Sheet.EFFECT_FRAMES)
 ##   Fx.slow_mo(seconds)             # a beat of slow motion after the hit-stop
 ##   Fx.swipe(node, dir)             # crescent swipe that follows a swinging node
 ##   Fx.lunge(pos, dir)              # long streaks trailing a dash slash
@@ -38,6 +39,9 @@ var _shake := 0.0
 var _stop_until := 0
 var _slow_until := 0
 var _kick := Vector2.ZERO
+## Off in scripted movement tests: freezes are timed in real time, so in a
+## fast headless run they'd stretch over hundreds of frames.
+var freezes := true
 var _flash := ColorRect.new()
 var _spark_ramp := Gradient.new()
 
@@ -81,7 +85,7 @@ func shake(amount: float) -> void:
 
 ## Uses real time, so stacking stops never freezes the game for long.
 func hit_stop(seconds: float) -> void:
-	if Rewind.is_rewinding:
+	if Rewind.is_rewinding or not freezes:
 		return
 	Engine.time_scale = STOP_SCALE
 	_stop_until = maxi(_stop_until, Time.get_ticks_msec() + int(seconds * 1000.0))
@@ -89,7 +93,7 @@ func hit_stop(seconds: float) -> void:
 
 ## Slow motion that starts once any hit-stop ends.
 func slow_mo(seconds: float) -> void:
-	if Rewind.is_rewinding:
+	if Rewind.is_rewinding or not freezes:
 		return
 	var from := maxi(_stop_until, Time.get_ticks_msec())
 	_slow_until = maxi(_slow_until, from + int(seconds * 1000.0))
@@ -191,6 +195,7 @@ func hurt(pos: Vector2, color := Color(1.0, 0.75, 0.8)) -> void:
 
 
 func parry(pos: Vector2) -> void:
+	sprite_fx("arcane_parry", pos, 0.7)
 	flash(Color.WHITE, 0.2)
 	var streaks: Array = []
 	for i in 4:
@@ -219,6 +224,7 @@ func swipe(node: Node2D, dir: Vector2, radius := 26.0, color := Color.WHITE,
 ## off along the blow, over a small white flash where the blade connected.
 func enemy_hit(pos: Vector2, dir: Vector2, color: Color, strength := 1.0) -> void:
 	var aim := dir.angle() if dir != Vector2.ZERO else -PI / 2
+	sprite_fx("electric_impact", pos, 0.5 * strength, 0.0, dir.x < 0.0)
 	var ink: Array = []
 	for i in int(5 * strength):
 		ink.append([aim + randf_range(-0.5, 0.5), randf_range(26.0, 54.0) * strength, randf_range(2.0, 4.0), randf_range(0.0, 0.1)])
@@ -235,7 +241,8 @@ func enemy_hit(pos: Vector2, dir: Vector2, color: Color, strength := 1.0) -> voi
 
 ## An enemy dies: a big soft glow in its colour, a splatter of goo, ink
 ## streaks everywhere, its body flung away, and embers drifting up after.
-func enemy_kill(pos: Vector2, dir: Vector2, color: Color, size := Vector2(16, 20), floor_y := -1.0) -> void:
+func enemy_kill(pos: Vector2, dir: Vector2, color: Color, size := Vector2(16, 20), floor_y := -1.0,
+		fling_body := true) -> void:
 	var aim := dir.angle() if dir != Vector2.ZERO else -PI / 2
 	slow_mo(0.12)
 	kick(dir, 6.0)
@@ -259,8 +266,33 @@ func enemy_kill(pos: Vector2, dir: Vector2, color: Color, size := Vector2(16, 20
 	_spawn(pos, Vfx.Kind.SPARKLES, 1.4, color, _sparkle_parts(12, -PI / 2, 1.4, 60.0))
 	_spawn(pos, Vfx.Kind.STREAKS, 0.2, Color.WHITE, [[aim, 70.0, 4.0, 0.0], [aim + 0.25, 46.0, 3.0, 0.0],
 		[aim - 0.25, 46.0, 3.0, 0.0]])
-	var fling := Vector2(cos(aim) * 140.0, -180.0) if absf(cos(aim)) > 0.3 else Vector2(randf_range(-80, 80), -220.0)
-	_spawn(pos, Vfx.Kind.CORPSE, 0.9, color.darkened(0.55), [[fling, size, randf_range(-9.0, 9.0)]], 20.0, false)
+	if fling_body:
+		var fling := Vector2(cos(aim) * 140.0, -180.0) if absf(cos(aim)) > 0.3 else Vector2(randf_range(-80, 80), -220.0)
+		_spawn(pos, Vfx.Kind.CORPSE, 0.9, color.darkened(0.55), [[fling, size, randf_range(-9.0, 9.0)]], 20.0, false)
+
+
+## Leaves a copy of an enemy's sprite playing its death animation, knocked a
+## little way along the blow, then fading out.
+func sprite_corpse(sprite: AnimatedSprite2D, dir: Vector2) -> void:
+	var scene := get_tree().current_scene
+	if scene == null or Rewind.is_rewinding:
+		return
+	var corpse := AnimatedSprite2D.new()
+	corpse.sprite_frames = sprite.sprite_frames
+	corpse.centered = false
+	corpse.offset = sprite.offset
+	corpse.global_position = sprite.global_position
+	corpse.scale = Vector2(sprite.scale.x, absf(sprite.scale.x) * signf(sprite.scale.y))
+	corpse.z_index = sprite.z_index
+	scene.add_child(corpse)
+	if corpse.sprite_frames.has_animation("death"):
+		corpse.play("death")
+	var tween := corpse.create_tween()
+	tween.tween_property(corpse, "position:x", corpse.position.x + signf(dir.x) * 14.0, 0.35) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	tween.tween_interval(0.7)
+	tween.tween_property(corpse, "modulate:a", 0.0, 0.5)
+	tween.tween_callback(corpse.queue_free)
 
 
 func lunge(pos: Vector2, dir: Vector2) -> void:
@@ -270,23 +302,48 @@ func lunge(pos: Vector2, dir: Vector2) -> void:
 	_spawn(pos, Vfx.Kind.STREAKS, 0.22, Color(0.75, 0.97, 1.0), streaks)
 
 
+## Plays a PVFX Foundry sprite effect once at pos, then frees it. A parent
+## makes it follow a moving node (pos is then local to it).
+func sprite_fx(effect: String, pos: Vector2, scale_by := 1.0, rotation_rad := 0.0, flip := false,
+		parent: Node2D = null, additive := true) -> AnimatedSprite2D:
+	var host: Node = parent if parent else get_tree().current_scene
+	if host == null or Rewind.is_rewinding:
+		return null
+	var sprite := AnimatedSprite2D.new()
+	sprite.sprite_frames = Sheet.effect(effect)
+	sprite.position = pos
+	sprite.rotation = rotation_rad
+	sprite.scale = Vector2(scale_by, scale_by)
+	sprite.flip_h = flip
+	sprite.z_index = 7
+	if additive:
+		sprite.material = Vfx.BLEND
+	sprite.animation_finished.connect(sprite.queue_free)
+	host.add_child(sprite)
+	sprite.play("play")
+	return sprite
+
+
 func telegraph(pos: Vector2, size := 10.0, color := Color(1.0, 0.35, 0.4)) -> void:
 	_spawn(pos, Vfx.Kind.STAR, 0.3, color, [], size)
 	_spawn(pos, Vfx.Kind.BLOOM, 0.25, color, [], size * 1.2)
 
 
 func deflect(pos: Vector2, color: Color) -> void:
+	sprite_fx("void_implosion", pos, 0.45)
 	_spawn(pos, Vfx.Kind.RING, 0.25, color, [], 30.0)
 	_spawn(pos, Vfx.Kind.STAR, 0.18, Color.WHITE, [], 18.0)
 
 
 func spawn_in(pos: Vector2, color: Color) -> void:
+	sprite_fx("rift_portal", pos, 0.6)
 	_spawn(pos, Vfx.Kind.RING, 0.4, color, [], 34.0)
 	_spawn(pos, Vfx.Kind.BLOOM, 0.4, color, [], 26.0)
 	_spawn(pos, Vfx.Kind.SPARKLES, 0.6, color, _sparkle_parts(10, -PI / 2, PI, 90.0))
 
 
 func ground_crack(pos: Vector2, color: Color) -> void:
+	sprite_fx("earth_rupture", pos + Vector2(0, -30), 1.3, 0.0, false, null, false)
 	var streaks: Array = []
 	for side in [0.0, PI]:
 		for i in 4:

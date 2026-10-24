@@ -17,6 +17,7 @@ func _physics_process(delta: float) -> void:
 	if player and not player.dead and player.position.distance_to(position) < RADIUS + 8.0:
 		Rewind.add_time(MS)
 		Fx.burst(position, COLOR, 8, 90.0)
+		Fx.sprite_fx("harvest_seal", position, 0.6)
 		Sfx.play("shard")
 		queue_free()
 

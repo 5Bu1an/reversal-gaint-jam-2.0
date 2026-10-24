@@ -1,14 +1,16 @@
 class_name Enemy
 extends CharacterBody2D
-## Corporate grunt, and the base class for every other enemy. Behaves like a
+## Rival ronin (the crimson samurai sprite), and the base class for every
+## other enemy. Behaves like a
 ## Hollow Knight husk: wanders and pauses, turns at walls and ledges, and when
 ## it notices you it winds up (eye flashes), charges, then stops to recover. A
 ## hit staggers it. Dead enemies stay in the tree
 ## (hidden) so a rewind can revive them; dormant ones wait for an arena wave.
 ##
-## Subclasses set their stats in _init() and override _act() and _draw_body(),
-## plus _pose() for how the body leans and stretches (drawn around the feet)
-## and _draw_extra() for anything that shouldn't lean with it.
+## Subclasses set their stats in _init() and override _act(), _make_sprite()
+## and _sprite_anim() for their art, _pose() for how the body leans and
+## stretches around the feet, and _draw_extra() for world-space extras.
+## _draw_body() is the placeholder look for anything without a sprite.
 ##
 ## Inverted enemies move backwards through time, like in Tenet: the player's
 ## own slashes bounce off, and only a ghost (a rewound timeline) can hurt them.
@@ -29,6 +31,9 @@ const CHARGE_MULT := 3.0
 const RECOVER_TIME := 0.7
 const STAGGER_TIME := 0.4
 const JOLT_TIME := 0.15
+## How long the little health bar stays up after a hit.
+const BAR_TIME := 2.5
+const SPRITE_SHADER := preload("res://shaders/sprite_flash.gdshader")
 ## Knocked back and stunned this long when the player parries it.
 const PARRY_KNOCKBACK := 220.0
 const PARRY_STAGGER := 0.9
@@ -37,7 +42,7 @@ const COLOR_BODY := Color("#05d9e8")
 const COLOR_EYE := Color("#ff2a6d")
 const COLOR_INVERTED := Color("#b967ff")
 
-var size := Vector2(24, 30)
+var size := Vector2(26, 54)
 var speed := 40.0
 var max_hp := 3
 ## Kept small so a quick combo stays in reach instead of chasing the enemy.
@@ -63,6 +68,9 @@ var ai_t := WANDER_TIME
 var _anim_t := 0.0
 var _squash := Vector2.ONE
 var _jolt_t := 0.0
+var _bar_t := 0.0
+var _art: AnimatedSprite2D
+var _art_scale := 1.0
 
 
 func _ready() -> void:
@@ -75,6 +83,10 @@ func _ready() -> void:
 	shape.shape = RectangleShape2D.new()
 	shape.shape.size = size
 	add_child(shape)
+	_art = _make_sprite()
+	if _art:
+		add_child(_art)
+		_update_sprite()
 
 
 func _physics_process(delta: float) -> void:
@@ -82,6 +94,8 @@ func _physics_process(delta: float) -> void:
 	_anim_t += delta
 	_squash = _squash.move_toward(Vector2.ONE, 3.0 * delta)
 	_jolt_t = maxf(_jolt_t - delta, 0.0)
+	_bar_t = maxf(_bar_t - delta, 0.0)
+	_update_sprite()
 	if Rewind.is_rewinding or dead or dormant:
 		return
 	hurt_t = maxf(hurt_t - delta, 0.0)
@@ -181,10 +195,11 @@ func take_hit(key: String, from_dir: Vector2, damage := 1) -> bool:
 	if inverted and not key.begins_with("g"):
 		Fx.impact(position, -from_dir, 0.6, COLOR_INVERTED)
 		Fx.deflect(position, COLOR_INVERTED)
-		Sfx.play("deflect")
+		Sfx.play("clash")
 		return false
 	hp -= damage
 	hurt_t = HURT_TIME
+	_bar_t = BAR_TIME
 	# Squashed by the blow, then it springs back.
 	_squash = Vector2(1.25, 0.75) if from_dir.x == 0.0 else Vector2(0.72, 1.22)
 	_jolt_t = JOLT_TIME
@@ -197,7 +212,11 @@ func take_hit(key: String, from_dir: Vector2, damage := 1) -> bool:
 		dead = true
 		Sfx.play("kill")
 		Fx.hit_stop(0.08)
-		Fx.enemy_kill(position, from_dir, blood_color(), size, position.y + size.y / 2 if is_on_floor() else -1.0)
+		Fx.enemy_kill(position, from_dir, blood_color(), size, position.y + size.y / 2 if is_on_floor() else -1.0,
+			_art == null)
+		if _art:
+			Fx.sprite_corpse(_art, from_dir)
+		_death_fx(from_dir)
 	return true
 
 
@@ -225,6 +244,10 @@ func _ground_ahead() -> bool:
 func _draw() -> void:
 	if dead or dormant:
 		return
+	if _art:
+		_draw_extra()
+		_draw_marks()
+		return
 	if spawn_t > 0.0:
 		if int(spawn_t * 24.0) % 2 == 0:
 			draw_rect(Rect2(-size / 2, size), COLOR_EYE, false, 1.0)
@@ -241,14 +264,97 @@ func _draw() -> void:
 	_draw_body(Color.WHITE if hurt_t > 0.0 else (COLOR_INVERTED if inverted else COLOR_BODY))
 	draw_set_transform(Vector2.ZERO)
 	_draw_extra()
+	_draw_marks()
+
+
+## Above the head: chevrons on inverted enemies, and a health bar for a
+## moment after each hit so you can see the damage land.
+func _draw_marks() -> void:
+	var top := -size.y / 2 - 6
 	if inverted:
 		# Backwards-pointing chevrons mark an inverted enemy.
-		var top := -size.y / 2 - 6
 		for i in 2:
 			var x := -dir * (2.0 + i * 5.0)
 			draw_polyline(PackedVector2Array([
 				Vector2(x + dir * 3, top - 3), Vector2(x, top), Vector2(x + dir * 3, top + 3),
-			]), COLOR_INVERTED, 1.0)
+			]), COLOR_INVERTED, 1.5)
+		top -= 8
+	if _bar_t > 0.0 and show_health_bar() and hp > 0:
+		var alpha := minf(_bar_t / 0.4, 1.0)
+		var width := maxf(size.x, 24.0)
+		var cell := width / max_hp
+		for i in max_hp:
+			var r := Rect2(-width / 2 + i * cell + 0.5, top - 3, cell - 1.0, 3)
+			draw_rect(r, Color(0, 0, 0, 0.6 * alpha))
+			if i < hp:
+				draw_rect(r.grow(-0.5), Color(blood_color(), alpha))
+
+
+## A ronin goes out in a crackle of blue lightning.
+func _death_fx(from_dir: Vector2) -> void:
+	Fx.sprite_fx("electric_impact", position, 0.95, 0.0, from_dir.x < 0.0)
+
+
+## The boss has its own bar on the HUD.
+func show_health_bar() -> bool:
+	return true
+
+
+## The rival ronin: crimson samurai sprite, drawn at 2x.
+func _make_sprite() -> AnimatedSprite2D:
+	var frames := Sheet.grid("res://assets/art/enemies/ronin_grunt.png", Vector2i(128, 64), {
+		"walk": [0, 5, 10.0, true], "idle": [0, 1, 1.0, false], "windup": [1, 2, 6.0, false],
+		"charge": [3, 4, 14.0, false], "death": [4, 4, 8.0, false],
+	})
+	return _new_sprite(frames, Vector2(58, 48), 2.0)
+
+
+## Animation for the current AI state.
+func _sprite_anim() -> String:
+	match ai:
+		Ai.WANDER:
+			return "walk" if absf(velocity.x) > 5.0 else "idle"
+		Ai.WINDUP:
+			return "windup"
+		Ai.CHARGE:
+			return "charge"
+	return "idle"
+
+
+func _new_sprite(frames: SpriteFrames, feet: Vector2, scale_by: float) -> AnimatedSprite2D:
+	var sprite := AnimatedSprite2D.new()
+	sprite.sprite_frames = frames
+	sprite.centered = false
+	sprite.offset = -feet
+	sprite.material = ShaderMaterial.new()
+	sprite.material.shader = SPRITE_SHADER
+	_art_scale = scale_by
+	sprite.play(frames.get_animation_names()[0])
+	return sprite
+
+
+## Keeps the sprite on the current animation, pose, facing and flashes. The
+## art faces right; the pose leans and stretches it around the feet.
+func _update_sprite() -> void:
+	if _art == null:
+		return
+	_art.visible = not dead and not dormant and (spawn_t <= 0.0 or int(spawn_t * 24.0) % 2 == 0)
+	var anim := _sprite_anim()
+	if _art.animation != anim:
+		_art.play(anim)
+	_art.speed_scale = -1.0 if Rewind.is_rewinding else 1.0
+	var pose := _pose()
+	var squash: Vector2 = pose[2] * _squash
+	var offset: Vector2 = pose[0]
+	if _jolt_t > 0.0:
+		offset.x += sin(_anim_t * 90.0) * 2.0 * (_jolt_t / JOLT_TIME)
+	_art.position = Vector2(0, size.y / 2) + offset
+	_art.rotation = pose[1]
+	_art.scale = Vector2(_art_scale * squash.x * dir, _art_scale * squash.y)
+	var mat := _art.material as ShaderMaterial
+	mat.set_shader_parameter("flash", clampf(hurt_t / HURT_TIME, 0.0, 1.0))
+	mat.set_shader_parameter("tint", COLOR_INVERTED)
+	mat.set_shader_parameter("tint_amount", 0.55 if inverted else 0.0)
 
 
 ## [offset, lean (radians), stretch] for the body this frame. A grunt bobs as
