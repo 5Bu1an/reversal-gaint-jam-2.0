@@ -4,8 +4,12 @@ extends Enemy
 ## charge and a jump slam whose shockwaves run along the floor. Below half
 ## health every wind-up and rest gets shorter, and it keeps flipping into an
 ## inverted state where only your ghost can hurt it.
+##
+## It bends time too: take too much damage too fast and it rewinds itself to
+## where (and how healthy) it was a few seconds ago. It's inverted while it
+## does, so only a ghost hit can interrupt it. Twice per fight.
 
-enum Mode { STALK, WINDUP_CHARGE, CHARGE, WINDUP_SLAM, AIR, RECOVER }
+enum Mode { STALK, WINDUP_CHARGE, CHARGE, WINDUP_SLAM, AIR, RECOVER, REVERSING }
 
 const NAME := "KURO SHOGUN"
 const CHARGE_SPEED := 300.0
@@ -16,6 +20,12 @@ const WAVE_SPEED := 210.0
 const WAVE_SIZE := Vector2(10, 14)
 const INVERTED_TIME := 3.5
 const NORMAL_TIME := 3.0
+const SNAP_EVERY := 0.25
+const SNAPS := 12 # 3 s of its own history
+const BURST_SNAPS := 8 # damage counted over the last 2 s
+const BURST_DAMAGE := 4
+const REVERSE_TIME := 1.2
+const REVERSALS := 2
 
 const COLOR_ARMOR := Color("#2a2140")
 const COLOR_TRIM := Color("#ff2a6d")
@@ -32,6 +42,13 @@ var attacks := 0
 var waves: Array[Vector3] = []
 ## Counts down to the next inverted/normal flip once enraged.
 var invert_t := 0.0
+## Its own short history as (x, y, hp), oldest first.
+var snaps: Array[Vector3] = []
+var snap_t := 0.0
+var reversals_left := REVERSALS
+## Snapshots being played backwards during a reversal, newest first.
+var reverse_path: Array[Vector3] = []
+var reverse_t := 0.0
 
 
 func _init() -> void:
@@ -47,6 +64,15 @@ func enraged() -> bool:
 
 func _act(delta: float) -> void:
 	mode_t = maxf(mode_t - delta, 0.0)
+	if mode == Mode.REVERSING:
+		_reverse(delta)
+		return
+	snap_t -= delta
+	if snap_t <= 0.0:
+		snap_t = SNAP_EVERY
+		snaps.append(Vector3(position.x, position.y, hp))
+		if snaps.size() > SNAPS:
+			snaps.pop_front()
 	velocity.y = minf(velocity.y + GRAVITY * delta, MAX_FALL)
 	var pace := 0.6 if enraged() else 1.0
 	if enraged():
@@ -115,6 +141,40 @@ func _act(delta: float) -> void:
 			waves.remove_at(i)
 
 
+func _start_reversal() -> void:
+	mode = Mode.REVERSING
+	reverse_path = snaps.duplicate()
+	reverse_path.reverse()
+	reverse_t = 0.0
+	reversals_left -= 1
+	snaps.clear()
+	inverted = true
+	waves.clear()
+	velocity = Vector2.ZERO
+	Fx.shake(6.0)
+	Fx.burst(position, COLOR_INVERTED, 24, 200.0)
+	Sfx.play("boss_rewind")
+
+
+func _reverse(delta: float) -> void:
+	reverse_t += delta
+	var last := reverse_path.size() - 1
+	var k := minf(reverse_t / REVERSE_TIME, 1.0) * last
+	var i := mini(int(k), last - 1)
+	var p := reverse_path[i].lerp(reverse_path[i + 1], k - i) if last > 0 else reverse_path[0]
+	position = Vector2(p.x, p.y)
+	hp = maxi(hp, int(p.z))
+	if reverse_t >= REVERSE_TIME:
+		_end_reversal()
+
+
+func _end_reversal() -> void:
+	inverted = false
+	invert_t = NORMAL_TIME
+	reverse_path.clear()
+	_recover(0.5)
+
+
 func _recover(time: float) -> void:
 	mode = Mode.RECOVER
 	mode_t = time
@@ -131,6 +191,12 @@ func damage_rects() -> Array[Rect2]:
 
 func take_hit(key: String, from_dir: Vector2) -> bool:
 	var landed := super(key, from_dir)
+	if landed and mode == Mode.REVERSING:
+		# A ghost hit knocks it out of the reversal where it stands.
+		_end_reversal()
+	elif landed and not dead and reversals_left > 0 and snaps.size() >= BURST_SNAPS \
+			and snaps[snaps.size() - BURST_SNAPS].z - hp >= BURST_DAMAGE:
+		_start_reversal()
 	if dead:
 		waves.clear()
 		Fx.hit_stop(0.35)
@@ -152,6 +218,11 @@ func _draw_body(body: Color) -> void:
 	draw_colored_polygon(PackedVector2Array([
 		Vector2(half.x, -half.y), Vector2(half.x + 8, -half.y - 12), Vector2(half.x - 6, -half.y),
 	]), COLOR_GOLD)
+	if mode == Mode.REVERSING:
+		# Afterimages along the path it's about to rewind through.
+		for j in range(reverse_path.size() - 1, -1, -3):
+			var ghost_pos := Vector2(reverse_path[j].x, reverse_path[j].y) - position
+			draw_rect(Rect2(ghost_pos - half, size), Color(COLOR_INVERTED, 0.25), false, 1.0)
 	var winding := mode == Mode.WINDUP_CHARGE or mode == Mode.WINDUP_SLAM
 	var visor := Color.WHITE if winding and int(mode_t * 20.0) % 2 == 0 else trim
 	var visor_x := 0.0 if dir > 0 else -half.x
@@ -171,6 +242,8 @@ func capture_state() -> Dictionary:
 	var state := super()
 	state.merge({
 		"mode": mode, "mode_t": mode_t, "attacks": attacks, "waves": waves.duplicate(), "invert_t": invert_t,
+		"snaps": snaps.duplicate(), "snap_t": snap_t, "reversals_left": reversals_left,
+		"reverse_path": reverse_path.duplicate(), "reverse_t": reverse_t,
 	})
 	return state
 
@@ -179,3 +252,5 @@ func apply_state(state: Dictionary) -> void:
 	super(state)
 	# History frames must never share the live array.
 	waves = state.waves.duplicate()
+	snaps = state.snaps.duplicate()
+	reverse_path = state.reverse_path.duplicate()

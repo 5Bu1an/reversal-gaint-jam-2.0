@@ -5,6 +5,7 @@ extends Node
 ##   Game.state_changed.connect(func(state): ...)   # show/hide screens
 ##   Game.checkpoint_reached.connect(...)           # "checkpoint" toast
 ##   Game.boss                                      # Boss node or null; read .hp / .max_hp
+##   Game.stats                                     # time, deaths, rewinds, rewound_ms
 ##   Game.restart() / Game.new_game() / Game.set_paused(bool)
 
 enum State { PLAYING, PAUSED, DOWN, GAME_OVER, WON }
@@ -16,10 +17,30 @@ signal checkpoint_reached(index: int)
 var checkpoint := 0
 var state := State.PLAYING
 var boss: Boss
+## This run's numbers, kept across checkpoint retries, cleared by new_game().
+var stats := {}
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	_reset_stats()
+	# Rewind is the next autoload, so it isn't in the tree yet.
+	_connect_rewind.call_deferred()
+
+
+func _connect_rewind() -> void:
+	Rewind.rewind_started.connect(func() -> void: stats.rewinds += 1)
+	Rewind.rewind_ended.connect(func(undone: Array) -> void:
+		stats.rewound_ms += undone.size() * Rewind.MS_PER_FRAME)
+
+
+func _physics_process(delta: float) -> void:
+	if state == State.PLAYING or state == State.DOWN:
+		stats.time += delta
+
+
+func _reset_stats() -> void:
+	stats = {"time": 0.0, "deaths": 0, "rewinds": 0, "rewound_ms": 0.0}
 
 
 func _process(_delta: float) -> void:
@@ -38,7 +59,11 @@ func _process(_delta: float) -> void:
 func set_state(new_state: State) -> void:
 	if new_state == state:
 		return
+	# Dying with no time left skips DOWN, so count whichever comes first.
+	var was_alive := state != State.DOWN and state != State.GAME_OVER
 	state = new_state
+	if was_alive and (state == State.DOWN or state == State.GAME_OVER):
+		stats.deaths += 1
 	state_changed.emit(state)
 
 
@@ -57,6 +82,10 @@ func reach_checkpoint(index: int) -> void:
 func win() -> void:
 	set_state(State.WON)
 	get_tree().paused = true
+	var layer := CanvasLayer.new()
+	layer.layer = 25
+	layer.add_child(preload("res://scripts/results.gd").new())
+	get_tree().current_scene.add_child(layer)
 
 
 ## Retry from the last checkpoint.
@@ -69,4 +98,5 @@ func restart() -> void:
 
 func new_game() -> void:
 	checkpoint = 0
+	_reset_stats()
 	restart()
