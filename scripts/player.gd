@@ -3,9 +3,12 @@ extends CharacterBody2D
 ## Hollow Knight-style controller: instant run and stop, a jump that rises at a
 ## steady speed while held and falls fast, dash, directional slash with recoil
 ## and pogo off enemies with a down-slash. Hold toward a wall in the air to
-## cling and slide; jump to kick off it (Mantis Claw). Hold attack to charge an echo slash
-## (nail art): its echo strikes the same spot again a moment later as a ghost
-## hit, so it can hurt inverted enemies. Spikes cost 1 HP and put you back
+## cling and slide; jump to kick off it (Mantis Claw). Hold attack to charge
+## a nail art, then: release for the Great Slash (double damage, and its echo
+## strikes the same spot again a moment later as a ghost hit, so it can hurt
+## inverted enemies); dash for the Dash Slash (a lunge that cuts through
+## everything in its path); or release holding up/down for the Cyclone Slash
+## (a spin that hits all around). Spikes cost 1 HP and put you back
 ## on the last safe ground you stood on. Drawn as placeholder shapes until
 ## sprites land in assets/art.
 
@@ -44,6 +47,17 @@ const CHARGE_TIME := 0.6
 const CHARGE_GLOW_FROM := 0.15
 const ECHO_DELAY := 0.5
 const ECHO_FLASH := 0.12
+const NAIL_ART_DAMAGE := 2
+const DASH_SLASH_SPEED := 460.0
+const DASH_SLASH_TIME := 0.2
+## The lunge hits from just behind you to a sword's reach in front.
+const DASH_SLASH_REACH := 34.0
+const CYCLONE_TIME := 0.45
+const CYCLONE_HITS := 3
+const CYCLONE_SIZE := Vector2(72, 44)
+## Spinning drifts at this fraction of run speed and barely falls.
+const CYCLONE_DRIFT := 0.5
+const CYCLONE_FALL := 40.0
 const WALL_SLIDE_SPEED := 60.0
 const WALL_JUMP_X := 190.0
 ## Push away from the wall this long before input steers again.
@@ -69,6 +83,10 @@ var attack_t := 0.0
 var attack_cd := 0.0
 var attack_dir := Vector2.RIGHT
 var attack_id := 0
+## 1 for a normal swing; nail arts hit harder.
+var attack_damage := 1
+var dash_slash_t := 0.0
+var cyclone_t := 0.0
 var invuln_t := 0.0
 var hurt_t := 0.0
 var grounded := true
@@ -142,7 +160,12 @@ func _physics_process(delta: float) -> void:
 		buffer_t = JUMP_BUFFER
 
 	var input_x := Input.get_axis("move_left", "move_right")
-	if dash_t > 0.0:
+	if dash_slash_t > 0.0:
+		velocity = Vector2(facing * DASH_SLASH_SPEED, 0)
+	elif cyclone_t > 0.0:
+		velocity.x = input_x * RUN_SPEED * CYCLONE_DRIFT
+		velocity.y = minf(velocity.y + GRAVITY * delta, CYCLONE_FALL)
+	elif dash_t > 0.0:
 		velocity = Vector2(facing * DASH_SPEED, 0)
 		charge_t = 0.0
 	elif hurt_t > 0.0:
@@ -196,7 +219,9 @@ func _physics_process(delta: float) -> void:
 		if Input.is_action_just_released("jump") and velocity.y < 0.0:
 			jump_hold_t = 0.0
 			velocity.y = maxf(velocity.y, -JUMP_RELEASE_SPEED)
-		if Input.is_action_just_pressed("dash") and dash_cd <= 0.0 and (is_on_floor() or not air_dash_used):
+		if Input.is_action_just_pressed("dash") and charge_t >= CHARGE_TIME:
+			_dash_slash()
+		elif Input.is_action_just_pressed("dash") and dash_cd <= 0.0 and (is_on_floor() or not air_dash_used):
 			dash_t = DASH_TIME
 			dash_cd = DASH_COOLDOWN
 			air_dash_used = not is_on_floor()
@@ -206,7 +231,9 @@ func _physics_process(delta: float) -> void:
 		if Input.is_action_just_pressed("attack") and attack_cd <= 0.0:
 			_start_attack()
 		elif Input.is_action_just_released("attack"):
-			if charge_t >= CHARGE_TIME:
+			if charge_t >= CHARGE_TIME and (Input.is_action_pressed("move_up") or Input.is_action_pressed("move_down")):
+				_cyclone_slash()
+			elif charge_t >= CHARGE_TIME:
 				_echo_slash()
 			charge_t = 0.0
 		elif Input.is_action_pressed("attack"):
@@ -227,6 +254,8 @@ func _physics_process(delta: float) -> void:
 		safe_pos = position
 	if attack_t > 0.0:
 		_resolve_attack()
+	if cyclone_t > 0.0:
+		_update_cyclone(delta)
 	_update_echoes(delta)
 	_check_damage()
 
@@ -234,7 +263,7 @@ func _physics_process(delta: float) -> void:
 ## Afterimages while dashing.
 func _dash_trail(delta: float) -> void:
 	_afterimage_t -= delta
-	if dash_t > 0.0 and _afterimage_t <= 0.0:
+	if (dash_t > 0.0 or dash_slash_t > 0.0) and _afterimage_t <= 0.0:
 		_afterimage_t = 0.035
 		Fx.afterimage(_sprite)
 
@@ -251,12 +280,14 @@ func _tick_timers(delta: float) -> void:
 	recoil_t = maxf(recoil_t - delta, 0.0)
 	wall_t = maxf(wall_t - delta, 0.0)
 	wall_lock_t = maxf(wall_lock_t - delta, 0.0)
+	dash_slash_t = maxf(dash_slash_t - delta, 0.0)
 
 
 func _start_attack() -> void:
 	attack_t = ATTACK_TIME
 	attack_cd = ATTACK_COOLDOWN
 	attack_id += 1
+	attack_damage = 1
 	if Input.is_action_pressed("move_up"):
 		attack_dir = Vector2.UP
 	elif Input.is_action_pressed("move_down") and not is_on_floor():
@@ -266,12 +297,56 @@ func _start_attack() -> void:
 	Sfx.play("slash")
 
 
+## Great Slash: a double-damage swing that leaves an echo behind.
 func _echo_slash() -> void:
 	_start_attack()
+	attack_damage = NAIL_ART_DAMAGE
 	echoes.append({
 		"rect": attack_rect(position, attack_dir), "dir": attack_dir, "id": attack_id, "t": ECHO_DELAY,
 	})
 	Fx.burst(position, Ghost.COLOR, 6, 120.0, 40.0, attack_dir)
+
+
+## Dash Slash: lunge forward, cutting through everything along the way.
+func _dash_slash() -> void:
+	charge_t = 0.0
+	attack_id += 1
+	attack_damage = NAIL_ART_DAMAGE
+	attack_dir = Vector2(facing, 0)
+	attack_t = DASH_SLASH_TIME
+	attack_cd = ATTACK_COOLDOWN
+	dash_slash_t = DASH_SLASH_TIME
+	dash_cd = DASH_COOLDOWN
+	squash = Vector2(1.4, 0.75)
+	Fx.burst(position, COLOR_VISOR, 6, 120.0, 30.0, Vector2(-facing, 0))
+	Sfx.play("dash")
+	Sfx.play("slash")
+
+
+## Cyclone Slash: spin in place, hitting all around a few times.
+func _cyclone_slash() -> void:
+	attack_id += 1
+	attack_cd = CYCLONE_TIME
+	cyclone_t = CYCLONE_TIME
+	velocity.y = minf(velocity.y, 0.0)
+	Sfx.play("slash")
+
+
+func _update_cyclone(delta: float) -> void:
+	var step := CYCLONE_TIME / CYCLONE_HITS
+	var before := cyclone_t
+	cyclone_t = maxf(cyclone_t - delta, 0.0)
+	# One hit at the start of each third of the spin.
+	var hit := int((CYCLONE_TIME - cyclone_t) / step)
+	if hit != int((CYCLONE_TIME - before) / step) or before == CYCLONE_TIME:
+		facing = -facing
+		var rect := Rect2(position - CYCLONE_SIZE / 2, CYCLONE_SIZE)
+		for enemy: Enemy in get_tree().get_nodes_in_group("enemies"):
+			if rect.intersects(enemy.hurt_rect()) and enemy.take_hit("p%d_c%d" % [attack_id, hit], Vector2(facing, 0)):
+				Rewind.add_time(MS_PER_HIT)
+				Fx.hit_stop(0.02)
+		if hit < CYCLONE_HITS:
+			Sfx.play("slash")
 
 
 ## Echo hits use a "g" key, so they count as ghost hits.
@@ -293,10 +368,14 @@ func _update_echoes(delta: float) -> void:
 
 func _resolve_attack() -> void:
 	var rect := attack_rect(position, attack_dir)
+	if dash_slash_t > 0.0:
+		var back := position.x - facing * SIZE.x
+		var front := position.x + facing * DASH_SLASH_REACH
+		rect = Rect2(minf(back, front), position.y - 12, absf(front - back), 24)
 	for enemy: Enemy in get_tree().get_nodes_in_group("enemies"):
 		if not rect.intersects(enemy.hurt_rect()):
 			continue
-		if enemy.take_hit("p%d" % attack_id, attack_dir):
+		if enemy.take_hit("p%d" % attack_id, attack_dir, attack_damage):
 			Rewind.add_time(MS_PER_HIT)
 			# A crisp, tiny freeze; no screen shake on ordinary hits.
 			Fx.hit_stop(0.03)
@@ -304,7 +383,7 @@ func _resolve_attack() -> void:
 				velocity.y = POGO_VELOCITY
 				jump_hold_t = 0.0
 				air_dash_used = false
-			elif attack_dir.x != 0.0:
+			elif attack_dir.x != 0.0 and dash_slash_t <= 0.0:
 				recoil_t = RECOIL_TIME
 				recoil_dir = -int(attack_dir.x)
 
@@ -406,6 +485,11 @@ func _feet() -> Vector2:
 func _draw() -> void:
 	_draw_charge()
 	_draw_echoes()
+	if cyclone_t > 0.0:
+		var spin := (1.0 - cyclone_t / CYCLONE_TIME) * TAU * CYCLONE_HITS
+		var r := CYCLONE_SIZE.x / 2 - 6
+		draw_arc(Vector2.ZERO, r, spin, spin + PI * 1.2, 20, Color(COLOR_VISOR, 0.8), 2.0)
+		draw_arc(Vector2.ZERO, r - 5, spin + PI, spin + PI * 2.0, 20, Color(COLOR_VISOR, 0.4), 1.0)
 
 
 func _draw_charge() -> void:
@@ -438,6 +522,7 @@ func capture_state() -> Dictionary:
 		"safe_pos": safe_pos, "respawn_t": respawn_t, "charge_t": charge_t, "echoes": echoes.duplicate(true),
 		"wall_t": wall_t, "wall_dir": wall_dir, "wall_lock_t": wall_lock_t,
 		"jump_hold_t": jump_hold_t, "recoil_t": recoil_t, "recoil_dir": recoil_dir,
+		"attack_damage": attack_damage, "dash_slash_t": dash_slash_t, "cyclone_t": cyclone_t,
 	}
 
 

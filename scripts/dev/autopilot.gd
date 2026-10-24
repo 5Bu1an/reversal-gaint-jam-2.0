@@ -204,6 +204,17 @@ func _make_plan(plan_name: String) -> Array:
 			for i in spots.size():
 				plan += [[5 + i * 60, "warp_xy", spots[i]], [50 + i * 60, "shot", "zoom_%d" % i]]
 			plan.append([5 + spots.size() * 60, "quit", ""])
+		"arts":
+			# Dash Slash into a held grunt (3 -> 1), then a Cyclone Slash on a
+			# fresh one right beside you (3 hits: 3 -> dead).
+			plan = [[1, "god", ""], [1, "warp_xy", Vector2(40, 316)], [2, "stage_grunt", Vector2(140, 316)],
+				[5, "press", "attack"], [50, "tap", "dash"], [60, "release", "attack"],
+				[80, "warp_xy", Vector2(40, 316)], [81, "stage_grunt", Vector2(70, 316)],
+				[85, "press", "attack"], [120, "press", "move_up"], [125, "stage_grunt", Vector2(66, 316)],
+				[131, "release", "attack"],
+				[140, "release", "move_up"], [180, "quit", ""], [134, "shot", "cyclone"], [53, "shot", "dash_slash"]]
+			for f in [49, 70, 130, 141, 165]:
+				plan.append([f, "grunt_trace", ""])
 		"win":
 			plan = [[1, "god", ""], [250, "warp", 2680], [255, "press", "move_right"], [260, "kill_boss", ""],
 				[300, "shot", "1_portal_open"], [600, "shot", "2_won"], [620, "quit", ""]]
@@ -363,6 +374,15 @@ func _physics_process(_delta: float) -> void:
 				for e: Enemy in get_tree().get_nodes_in_group("enemies"):
 					if e.inverted:
 						e.speed = 40.0
+			"stage_grunt":
+				for e: Enemy in get_tree().get_nodes_in_group("enemies"):
+					if e.get_script() == Enemy and not e.inverted and not e.dormant:
+						e.dead = false
+						e.hp = e.max_hp
+						e.position = step[2]
+						e.speed = 0.0
+						e.last_hit = ""
+						break
 			"stage_pogo":
 				var grunt: Enemy = null
 				for e: Enemy in get_tree().get_nodes_in_group("enemies"):
@@ -387,8 +407,8 @@ func _physics_process(_delta: float) -> void:
 			"grunt_trace":
 				for e: Enemy in get_tree().get_nodes_in_group("enemies"):
 					if e.get_script() == Enemy and not e.inverted:
-						print("[grunt] frame=%d x=%d vx=%.0f ai=%s ai_t=%.2f dir=%d" % [
-							_frame, e.position.x, e.velocity.x, Enemy.Ai.keys()[e.ai], e.ai_t, e.dir])
+						print("[grunt] frame=%d x=%d vx=%.0f hp=%d dead=%s ai=%s ai_t=%.2f dir=%d" % [
+							_frame, e.position.x, e.velocity.x, e.hp, e.dead, Enemy.Ai.keys()[e.ai], e.ai_t, e.dir])
 						break
 			"warp_xy":
 				var p: Player = get_tree().get_first_node_in_group("player")

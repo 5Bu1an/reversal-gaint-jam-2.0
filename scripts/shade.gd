@@ -40,7 +40,7 @@ func damage_rects() -> Array[Rect2]:
 
 ## Any slash (yours or a ghost's) collects it. Returns false so the hit
 ## doesn't also pay out MS_PER_HIT or pogo you.
-func take_hit(key: String, _from_dir: Vector2) -> bool:
+func take_hit(key: String, _from_dir: Vector2, _damage := 1) -> bool:
 	if not is_active() or key == last_hit:
 		return false
 	last_hit = key

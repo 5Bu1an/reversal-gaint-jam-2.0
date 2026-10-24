@@ -148,8 +148,8 @@ func damage_rects() -> Array[Rect2]:
 	return [hurt_rect()]
 
 
-## Returns true if the hit landed.
-func take_hit(key: String, from_dir: Vector2) -> bool:
+## Returns true if the hit landed. Nail arts pass a bigger damage.
+func take_hit(key: String, from_dir: Vector2, damage := 1) -> bool:
 	if not is_active() or key == last_hit:
 		return false
 	last_hit = key
@@ -157,7 +157,7 @@ func take_hit(key: String, from_dir: Vector2) -> bool:
 		Fx.burst(position, COLOR_INVERTED, 4, 140.0, 40.0, -from_dir if from_dir != Vector2.ZERO else Vector2.UP)
 		Sfx.play("deflect")
 		return false
-	hp -= 1
+	hp -= damage
 	hurt_t = HURT_TIME
 	_set_ai(Ai.RECOVER, STAGGER_TIME)
 	if from_dir.x != 0.0:

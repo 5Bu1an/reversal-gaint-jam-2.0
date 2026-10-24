@@ -188,8 +188,8 @@ func damage_rects() -> Array[Rect2]:
 	return rects
 
 
-func take_hit(key: String, from_dir: Vector2) -> bool:
-	var landed := super(key, from_dir)
+func take_hit(key: String, from_dir: Vector2, damage := 1) -> bool:
+	var landed := super(key, from_dir, damage)
 	if landed and mode == Mode.REVERSING:
 		# A ghost hit knocks it out of the reversal where it stands.
 		_end_reversal()
