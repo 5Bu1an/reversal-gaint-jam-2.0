@@ -37,6 +37,15 @@ const SPIKES: Array[Rect2] = [
 ]
 const SHARDS: Array[Vector2] = [Vector2(345, 222), Vector2(915, 236), Vector2(1600, 210), Vector2(2370, 236)]
 
+## Tutorial signs: position, then headline and detail lines.
+const HINTS := [
+	[Vector2(150, 150), ["HOLD L TO REWIND TIME", "the timeline you undo keeps fighting as a ghost"]],
+	[Vector2(470, 150), ["PURPLE = INVERTED", "your blade bounces off - swing, then rewind", "your ghost's swings land"]],
+	[Vector2(650, 150), ["S + J IN THE AIR TO POGO", "bounce off enemies to cross the spikes"]],
+	[Vector2(1230, 150), ["HITS REFILL YOUR TIME", "so do time shards"]],
+	[Vector2(2480, 150), ["THE SHOGUN BENDS TIME TOO", "jump the shockwaves"]],
+]
+
 const PLAYER_SPAWN := Vector2(48, 316)
 const CHECKPOINT_X := 2060.0
 const CHECKPOINT_SPAWN := Vector2(2060, 316)
@@ -71,6 +80,11 @@ func _ready() -> void:
 		var shard := Shard.new()
 		shard.position = pos
 		add_child(shard)
+
+	for hint: Array in HINTS:
+		var sign_node := Hint.new().setup(PackedStringArray(hint[1]))
+		sign_node.position = hint[0]
+		add_child(sign_node)
 
 	# Roaming enemies outside the arenas.
 	_grunt(Vector2(260, 316))

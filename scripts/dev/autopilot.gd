@@ -6,7 +6,8 @@ extends Node
 ## state line at each shot, then quits. --checkpoint=1 starts at the shrine.
 ## Plans: fight, arena (waves, rewind undo, gates), boss, win, retrace,
 ## inverted (only the ghost can hurt inverted enemies), boss2 (enraged boss
-## flipping between normal and inverted; use with --checkpoint=1).
+## flipping between normal and inverted; use with --checkpoint=1), reversal
+## (burst the boss until it rewinds itself; --checkpoint=1).
 
 const PLANS := {
 	"fight": [
@@ -88,6 +89,14 @@ func _make_plan(plan_name: String) -> Array:
 			for f in range(300, 700, 30):
 				plan.append([f, "boss_trace", ""])
 			plan.append([420, "shot", "boss2"])
+		"reversal":
+			# Burst 4 damage, let it rewind; burst again and interrupt the second
+			# reversal with a (fake) ghost hit.
+			plan = [[1, "god", ""], [5, "press", "move_right"], [290, "release", "move_right"],
+				[500, "burst_boss", 4], [530, "shot", "1_reversing"],
+				[700, "burst_boss", 4], [720, "ghost_hit_boss", ""], [800, "quit", ""]]
+			for f in range(480, 800, 10):
+				plan.append([f, "boss_trace", ""])
 		"win":
 			plan = [[1, "god", ""], [5, "press", "move_right"], [260, "kill_boss", ""],
 				[300, "shot", "1_portal_open"], [600, "shot", "2_won"], [620, "quit", ""]]
@@ -135,8 +144,14 @@ func _physics_process(_delta: float) -> void:
 			"boss_half":
 				Game.boss.hp = Game.boss.max_hp / 2
 			"boss_trace":
-				print("[boss] frame=%d hp=%d inverted=%s invert_t=%.1f mode=%s" % [_frame, Game.boss.hp,
-					Game.boss.inverted, Game.boss.invert_t, Boss.Mode.keys()[Game.boss.mode]])
+				print("[boss] frame=%d hp=%d inverted=%s invert_t=%.1f mode=%s x=%d reversals_left=%d" % [
+					_frame, Game.boss.hp, Game.boss.inverted, Game.boss.invert_t, Boss.Mode.keys()[Game.boss.mode],
+					Game.boss.position.x, Game.boss.reversals_left])
+			"burst_boss":
+				for i in step[2]:
+					Game.boss.take_hit("burst%d_%d" % [_frame, i], Vector2.RIGHT)
+			"ghost_hit_boss":
+				Game.boss.take_hit("g_test_%d" % _frame, Vector2.RIGHT)
 			"kill_boss":
 				Game.boss.hp = 0
 				Game.boss.dead = true
