@@ -191,7 +191,7 @@ func _physics_process(delta: float) -> void:
 			buffer_t = 0.0
 			coyote_t = 0.0
 			squash = Vector2(0.75, 1.3)
-			Fx.dust(_feet())
+			Fx.dust(_feet(), 3)
 			Sfx.play("jump")
 		if Input.is_action_just_released("jump") and velocity.y < 0.0:
 			jump_hold_t = 0.0
@@ -201,7 +201,7 @@ func _physics_process(delta: float) -> void:
 			dash_cd = DASH_COOLDOWN
 			air_dash_used = not is_on_floor()
 			squash = Vector2(1.35, 0.8)
-			Fx.burst(position, COLOR_VISOR, 8, 90.0, 30.0, Vector2(-facing, 0))
+			Fx.burst(position, COLOR_VISOR, 4, 80.0, 30.0, Vector2(-facing, 0))
 			Sfx.play("dash")
 		if Input.is_action_just_pressed("attack") and attack_cd <= 0.0:
 			_start_attack()
@@ -213,14 +213,14 @@ func _physics_process(delta: float) -> void:
 			var was_ready := charge_t >= CHARGE_TIME
 			charge_t += delta
 			if not was_ready and charge_t >= CHARGE_TIME:
-				Fx.burst(position, Ghost.COLOR, 10, 80.0)
+				Fx.burst(position, Ghost.COLOR, 5, 70.0)
 				Sfx.play("charge")
 
 	var fall_speed := velocity.y
 	move_and_slide()
 	if is_on_floor() and not grounded and fall_speed > 150.0:
 		squash = Vector2(1.3, 0.75)
-		Fx.dust(_feet(), 8)
+		Fx.dust(_feet(), 4 if fall_speed > 300.0 else 2)
 	grounded = is_on_floor()
 	_dash_trail(delta)
 	if is_on_floor() and hurt_t <= 0.0 and _on_safe_ground():
@@ -271,7 +271,7 @@ func _echo_slash() -> void:
 	echoes.append({
 		"rect": attack_rect(position, attack_dir), "dir": attack_dir, "id": attack_id, "t": ECHO_DELAY,
 	})
-	Fx.burst(position, Ghost.COLOR, 12, 140.0, 40.0, attack_dir)
+	Fx.burst(position, Ghost.COLOR, 6, 120.0, 40.0, attack_dir)
 
 
 ## Echo hits use a "g" key, so they count as ghost hits.
@@ -285,7 +285,7 @@ func _update_echoes(delta: float) -> void:
 			for enemy: Enemy in get_tree().get_nodes_in_group("enemies"):
 				if rect.intersects(enemy.hurt_rect()):
 					enemy.take_hit("g_echo%d" % echo.id, echo.dir)
-			Fx.burst(rect.get_center(), Ghost.COLOR, 10, 120.0)
+			Fx.burst(rect.get_center(), Ghost.COLOR, 5, 100.0)
 			Sfx.play("slash")
 		if echo.t <= -ECHO_FLASH:
 			echoes.remove_at(i)
@@ -298,8 +298,8 @@ func _resolve_attack() -> void:
 			continue
 		if enemy.take_hit("p%d" % attack_id, attack_dir):
 			Rewind.add_time(MS_PER_HIT)
-			Fx.hit_stop(0.045)
-			Fx.shake(2.0)
+			# A crisp, tiny freeze; no screen shake on ordinary hits.
+			Fx.hit_stop(0.03)
 			if attack_dir == Vector2.DOWN:
 				velocity.y = POGO_VELOCITY
 				jump_hold_t = 0.0
@@ -337,10 +337,10 @@ func _take_damage(source: Vector2) -> void:
 		away = -facing
 	velocity = Vector2(away * KNOCKBACK.x, KNOCKBACK.y)
 	Sfx.play("death" if hp <= 0 else "hurt")
-	Fx.flash(COLOR_BODY, 0.28)
+	Fx.flash(COLOR_BODY, 0.15)
 	Fx.hit_stop(0.12)
-	Fx.shake(6.0)
-	Fx.burst(position, COLOR_BODY, 14, 160.0)
+	Fx.shake(3.0)
+	Fx.burst(position, COLOR_BODY, 8, 140.0)
 	if hp <= 0:
 		_die()
 
@@ -349,8 +349,8 @@ func _spike_hit() -> void:
 	hp -= 1
 	Sfx.play("hurt")
 	Fx.hit_stop(0.12)
-	Fx.shake(6.0)
-	Fx.burst(position, COLOR_BODY, 14, 160.0)
+	Fx.shake(3.0)
+	Fx.burst(position, COLOR_BODY, 8, 140.0)
 	if hp <= 0:
 		_die()
 		return
@@ -368,7 +368,7 @@ func _tick_respawn(delta: float) -> void:
 	respawn_t = maxf(respawn_t - delta, 0.0)
 	if before > half and respawn_t <= half:
 		position = safe_pos
-		Fx.burst(position, COLOR_VISOR, 12, 100.0)
+		Fx.burst(position, COLOR_VISOR, 6, 80.0)
 	velocity = Vector2.ZERO
 
 
@@ -394,8 +394,8 @@ func shade_spot() -> Vector2:
 func _die() -> void:
 	dead = true
 	velocity = Vector2.ZERO
-	Fx.shake(10.0)
-	Fx.burst(position, COLOR_BODY, 30, 220.0)
+	Fx.shake(5.0)
+	Fx.burst(position, COLOR_BODY, 16, 180.0)
 
 
 func _feet() -> Vector2:

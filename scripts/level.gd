@@ -50,16 +50,15 @@ const SHARDS: Array[Vector2] = [
 	Vector2(2220, 46), # top of the shrine chimney
 ]
 
-## Tutorial signs: position, then headline and detail lines.
+## Inscriptions: position, then lines. They only show when you stand close.
 const HINTS := [
-	[Vector2(110, 110), ["HOLD L TO REWIND TIME", "the timeline you undo keeps fighting as a ghost"]],
-	[Vector2(470, 100), ["OR HOLD J, THEN RELEASE", "echo slash: the echo strikes again, like a ghost"]],
-	[Vector2(470, 150), ["PURPLE = INVERTED", "your blade bounces off - swing, then rewind", "your ghost's swings land"]],
-	[Vector2(640, 196), ["THORNS ABOVE", "tap jump for a short hop"]],
-	[Vector2(990, 100), ["S + J IN THE AIR TO POGO", "bounce off drones to stay up"]],
-	[Vector2(1190, 150), ["HITS REFILL YOUR TIME", "so do time shards"]],
-	[Vector2(2110, 120), ["HOLD TOWARD A WALL TO CLING", "jump to kick off - something waits up the chimney"]],
-	[Vector2(2480, 150), ["THE SHOGUN BENDS TIME TOO", "jump the shockwaves"]],
+	[Vector2(110, 200), ["Hold L to turn time back.", "What you undo keeps moving, as a ghost."]],
+	[Vector2(390, 200), ["Hold J, then let go.", "An echo of the cut strikes again, as a ghost would."]],
+	[Vector2(520, 200), ["Some here move backwards through time.", "Your blade glances off them. Your ghost's does not."]],
+	[Vector2(660, 200), ["Thorns hang low ahead.", "A light tap of jump keeps you under them."]],
+	[Vector2(990, 160), ["Strike downward in the air", "to spring off what lies below."]],
+	[Vector2(2110, 200), ["Cling to a wall by holding toward it.", "Something waits at the top of the shaft."]],
+	[Vector2(2480, 200), ["Beyond, the Shogun.", "It bends time as you do."]],
 ]
 
 const PLAYER_SPAWN := Vector2(48, 316)

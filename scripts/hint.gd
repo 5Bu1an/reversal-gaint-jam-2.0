@@ -1,12 +1,12 @@
 class_name Hint
 extends Node2D
-## Tutorial sign painted into the world. Fades in as the player gets close
-## and stays dim otherwise, so it never clutters the screen.
+## A quiet inscription in the world, like a lore tablet: pale sentence-case
+## text that only shows when you stand right by it, and fades as you leave.
 
-const NEAR := 90.0
-const FAR := 220.0
-const LINE_HEIGHT := 11.0
-const COLOR := Color("#05d9e8")
+const NEAR := 50.0
+const FAR := 100.0
+const LINE_HEIGHT := 10.0
+const COLOR := Color("#dcdcf0")
 
 var lines: PackedStringArray = []
 
@@ -25,10 +25,10 @@ func _draw() -> void:
 	if player == null:
 		return
 	var dist := absf(player.position.x - position.x)
-	var alpha := clampf(remap(dist, FAR, NEAR, 0.12, 1.0), 0.12, 1.0)
+	var alpha := clampf(remap(dist, FAR, NEAR, 0.0, 1.0), 0.0, 1.0)
+	if alpha <= 0.0:
+		return
 	var font := ThemeDB.fallback_font
 	for i in lines.size():
-		var size := 9 if i == 0 else 7
-		var color := COLOR if i == 0 else Color.WHITE
-		draw_string(font, Vector2(-100, i * LINE_HEIGHT), lines[i], HORIZONTAL_ALIGNMENT_CENTER, 200, size,
-			Color(color, alpha * (1.0 if i == 0 else 0.7)))
+		var color := Color(COLOR, alpha * (0.9 if i == 0 else 0.6))
+		draw_string(font, Vector2(-120, i * LINE_HEIGHT), lines[i], HORIZONTAL_ALIGNMENT_CENTER, 240, 8, color)

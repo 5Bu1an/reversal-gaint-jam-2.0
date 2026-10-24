@@ -81,7 +81,6 @@ func _act(delta: float) -> void:
 			inverted = not inverted
 			invert_t = INVERTED_TIME if inverted else NORMAL_TIME
 			hurt_t = HURT_TIME # flash on every flip
-			Fx.shake(3.0)
 	var player: Player = get_tree().get_first_node_in_group("player")
 	var to_player := 0
 	if player:
@@ -127,9 +126,9 @@ func _act(delta: float) -> void:
 		waves.append(Vector3(position.x - size.x / 2, floor_y, -1))
 		waves.append(Vector3(position.x + size.x / 2, floor_y, 1))
 		Sfx.play("boss_slam")
-		Fx.shake(5.0)
-		Fx.dust(Vector2(position.x - size.x / 2, floor_y), 10)
-		Fx.dust(Vector2(position.x + size.x / 2, floor_y), 10)
+		Fx.shake(2.5)
+		Fx.dust(Vector2(position.x - size.x / 2, floor_y), 6)
+		Fx.dust(Vector2(position.x + size.x / 2, floor_y), 6)
 		_recover(0.6 * pace)
 
 	var wave_speed := WAVE_SPEED / pace
@@ -151,8 +150,8 @@ func _start_reversal() -> void:
 	inverted = true
 	waves.clear()
 	velocity = Vector2.ZERO
-	Fx.shake(6.0)
-	Fx.burst(position, COLOR_INVERTED, 24, 200.0)
+	Fx.shake(3.0)
+	Fx.burst(position, COLOR_INVERTED, 12, 160.0)
 	Sfx.play("boss_rewind")
 
 
@@ -200,8 +199,8 @@ func take_hit(key: String, from_dir: Vector2) -> bool:
 	if dead:
 		waves.clear()
 		Fx.hit_stop(0.35)
-		Fx.shake(10.0)
-		Fx.burst(position, COLOR_GOLD, 40, 260.0)
+		Fx.shake(6.0)
+		Fx.burst(position, COLOR_GOLD, 24, 220.0)
 	return landed
 
 
