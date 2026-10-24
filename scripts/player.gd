@@ -1,6 +1,7 @@
 class_name Player
 extends CharacterBody2D
-## Hollow Knight-style controller: run, variable jump, dash, directional slash
+## Hollow Knight-style controller: instant run and stop, a jump that rises at a
+## steady speed while held and falls fast, dash, directional slash with recoil
 ## and pogo off enemies with a down-slash. Hold toward a wall in the air to
 ## cling and slide; jump to kick off it (Mantis Claw). Hold attack to charge an echo slash
 ## (nail art): its echo strikes the same spot again a moment later as a ghost
@@ -9,11 +10,15 @@ extends CharacterBody2D
 ## sprites land in assets/art.
 
 const SIZE := Vector2(12, 24)
-const RUN_SPEED := 150.0
-const GRAVITY := 980.0
-const MAX_FALL := 420.0
-const JUMP_VELOCITY := -330.0
-const JUMP_CUT := 0.45
+const RUN_SPEED := 155.0
+const GRAVITY := 1400.0
+const MAX_FALL := 440.0
+## Holding jump keeps rising at JUMP_SPEED for up to JUMP_HOLD, then gravity
+## takes over: ~58 px at full hold, a short hop on a tap.
+const JUMP_SPEED := 260.0
+const JUMP_HOLD := 0.13
+## Letting go early caps the rise at this speed, so taps stay small.
+const JUMP_RELEASE_SPEED := 90.0
 const COYOTE_TIME := 0.08
 const JUMP_BUFFER := 0.1
 const DASH_SPEED := 400.0
@@ -21,7 +26,10 @@ const DASH_TIME := 0.14
 const DASH_COOLDOWN := 0.4
 const ATTACK_TIME := 0.15
 const ATTACK_COOLDOWN := 0.3
-const POGO_VELOCITY := -300.0
+const POGO_VELOCITY := -340.0
+## Landing a sideways slash pushes you back a little, like the nail does.
+const RECOIL_SPEED := 170.0
+const RECOIL_TIME := 0.08
 const MAX_HP := 5
 const INVULN_TIME := 0.8
 const HURT_TIME := 0.25
@@ -51,6 +59,9 @@ var hp := MAX_HP
 var dead := false
 var coyote_t := 0.0
 var buffer_t := 0.0
+var jump_hold_t := 0.0
+var recoil_t := 0.0
+var recoil_dir := 0
 var dash_t := 0.0
 var dash_cd := 0.0
 var air_dash_used := false
@@ -149,11 +160,18 @@ func _physics_process(delta: float) -> void:
 			air_dash_used = false
 		if wall_lock_t > 0.0:
 			velocity.x = wall_dir * WALL_JUMP_X
+		elif recoil_t > 0.0:
+			velocity.x = recoil_dir * RECOIL_SPEED
 		else:
 			if input_x != 0.0:
 				facing = int(signf(input_x))
 			velocity.x = input_x * RUN_SPEED
-		velocity.y = minf(velocity.y + GRAVITY * delta, MAX_FALL)
+		if jump_hold_t > 0.0 and Input.is_action_pressed("jump"):
+			velocity.y = -JUMP_SPEED
+			jump_hold_t = maxf(jump_hold_t - delta, 0.0)
+		else:
+			jump_hold_t = 0.0
+			velocity.y = minf(velocity.y + GRAVITY * delta, MAX_FALL)
 		if wall_sliding:
 			# Face away from the wall so slashes hit what's in front of you.
 			facing = wall_dir
@@ -161,7 +179,8 @@ func _physics_process(delta: float) -> void:
 			if Engine.get_physics_frames() % 8 == 0:
 				Fx.dust(position + Vector2(-wall_dir * SIZE.x / 2, 0), 2)
 		if buffer_t > 0.0 and coyote_t <= 0.0 and wall_t > 0.0:
-			velocity = Vector2(wall_dir * WALL_JUMP_X, JUMP_VELOCITY)
+			velocity = Vector2(wall_dir * WALL_JUMP_X, -JUMP_SPEED)
+			jump_hold_t = JUMP_HOLD
 			facing = wall_dir
 			wall_lock_t = WALL_JUMP_LOCK
 			wall_t = 0.0
@@ -170,14 +189,16 @@ func _physics_process(delta: float) -> void:
 			Fx.dust(position + Vector2(-wall_dir * SIZE.x / 2, 0))
 			Sfx.play("jump")
 		elif buffer_t > 0.0 and coyote_t > 0.0:
-			velocity.y = JUMP_VELOCITY
+			velocity.y = -JUMP_SPEED
+			jump_hold_t = JUMP_HOLD
 			buffer_t = 0.0
 			coyote_t = 0.0
 			squash = Vector2(0.75, 1.3)
 			Fx.dust(_feet())
 			Sfx.play("jump")
 		if Input.is_action_just_released("jump") and velocity.y < 0.0:
-			velocity.y *= JUMP_CUT
+			jump_hold_t = 0.0
+			velocity.y = maxf(velocity.y, -JUMP_RELEASE_SPEED)
 		if Input.is_action_just_pressed("dash") and dash_cd <= 0.0 and (is_on_floor() or not air_dash_used):
 			dash_t = DASH_TIME
 			dash_cd = DASH_COOLDOWN
@@ -221,6 +242,7 @@ func _tick_timers(delta: float) -> void:
 	attack_cd = maxf(attack_cd - delta, 0.0)
 	invuln_t = maxf(invuln_t - delta, 0.0)
 	hurt_t = maxf(hurt_t - delta, 0.0)
+	recoil_t = maxf(recoil_t - delta, 0.0)
 	wall_t = maxf(wall_t - delta, 0.0)
 	wall_lock_t = maxf(wall_lock_t - delta, 0.0)
 
@@ -274,7 +296,11 @@ func _resolve_attack() -> void:
 			Fx.shake(2.0)
 			if attack_dir == Vector2.DOWN:
 				velocity.y = POGO_VELOCITY
+				jump_hold_t = 0.0
 				air_dash_used = false
+			elif attack_dir.x != 0.0:
+				recoil_t = RECOIL_TIME
+				recoil_dir = -int(attack_dir.x)
 
 
 func _check_damage() -> void:
@@ -345,13 +371,13 @@ func _on_safe_ground() -> bool:
 	return true
 
 
-## Where to leave the death shade: here, unless that's above spikes, where
-## it couldn't be slashed without getting hurt; then the last safe ground.
+## Where to leave the death shade: here, unless that's over thorns, where it
+## couldn't be slashed without getting hurt; then the last safe ground.
 func shade_spot() -> Vector2:
 	var left := position.x - SIZE.x / 2 - SAFE_MARGIN
 	var right := position.x + SIZE.x / 2 + SAFE_MARGIN
 	for rect in hazards:
-		if right > rect.position.x and left < rect.end.x:
+		if rect.position.y > position.y and right > rect.position.x and left < rect.end.x:
 			return safe_pos
 	return position
 
@@ -416,6 +442,7 @@ func capture_state() -> Dictionary:
 		"invuln_t": invuln_t, "hurt_t": hurt_t, "coyote_t": coyote_t,
 		"safe_pos": safe_pos, "respawn_t": respawn_t, "charge_t": charge_t, "echoes": echoes.duplicate(true),
 		"wall_t": wall_t, "wall_dir": wall_dir, "wall_lock_t": wall_lock_t,
+		"jump_hold_t": jump_hold_t, "recoil_t": recoil_t, "recoil_dir": recoil_dir,
 	}
 
 
