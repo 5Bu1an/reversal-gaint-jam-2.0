@@ -59,6 +59,14 @@ func _make_plan(plan_name: String) -> Array:
 			plan += [[420, "shot", "2_boss_mid"], [600, "shot", "3_boss_late"],
 				[700, "press", "rewind"], [740, "shot", "4_boss_rewind"], [760, "release", "rewind"],
 				[766, "shot", "5_boss_ghost"], [900, "quit", ""]]
+		"retrace":
+			# Run, jump and slash for 2 s, then hold rewind for 1 s; the trace
+			# while rewinding should mirror the forward trace frame for frame.
+			plan = [[5, "press", "move_right"], [40, "tap", "jump"], [70, "tap", "attack"],
+				[90, "release", "move_right"], [91, "press", "move_left"], [125, "release", "move_left"],
+				[125, "press", "rewind"], [185, "release", "rewind"], [200, "quit", ""]]
+			for f in range(65, 186, 5):
+				plan.append([f, "trace", ""])
 		"win":
 			plan = [[1, "god", ""], [5, "press", "move_right"], [260, "kill_boss", ""],
 				[300, "shot", "1_portal_open"], [600, "shot", "2_won"], [620, "quit", ""]]
@@ -86,6 +94,10 @@ func _physics_process(_delta: float) -> void:
 				get_tree().quit()
 			"god":
 				get_tree().get_first_node_in_group("player").hp = 999
+			"trace":
+				var p: Player = get_tree().get_first_node_in_group("player")
+				print("[trace] frame=%d rewinding=%s pos=(%.1f,%.1f) facing=%d attack_t=%.2f" % [
+					_frame, Rewind.is_rewinding, p.position.x, p.position.y, p.facing, p.attack_t])
 			"warp":
 				get_tree().get_first_node_in_group("player").position.x = step[2]
 			"face_boss":

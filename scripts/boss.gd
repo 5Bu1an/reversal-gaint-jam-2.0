@@ -88,6 +88,10 @@ func _act(delta: float) -> void:
 		var floor_y := position.y + size.y / 2
 		waves.append(Vector3(position.x - size.x / 2, floor_y, -1))
 		waves.append(Vector3(position.x + size.x / 2, floor_y, 1))
+		Fx.shake(5.0)
+		Fx.dust(Vector2(position.x - size.x / 2, floor_y), 10)
+		Fx.dust(Vector2(position.x + size.x / 2, floor_y), 10)
+		Sfx.play("slam")
 		_recover(0.6 * pace)
 
 	var wave_speed := WAVE_SPEED / pace
@@ -117,6 +121,9 @@ func take_hit(key: String, from_dir: Vector2) -> bool:
 	var landed := super(key, from_dir)
 	if dead:
 		waves.clear()
+		Fx.hit_stop(0.35)
+		Fx.shake(10.0)
+		Fx.burst(position, COLOR_GOLD, 40, 260.0)
 	return landed
 
 

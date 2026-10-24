@@ -41,6 +41,9 @@ var attack_dir := Vector2.RIGHT
 var attack_id := 0
 var invuln_t := 0.0
 var hurt_t := 0.0
+## Cosmetic squash and stretch, eases back to 1.
+var squash := Vector2.ONE
+var _was_on_floor := true
 
 ## Damage rects in world space, set by the level.
 var hazards: Array[Rect2] = []
@@ -83,6 +86,7 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	queue_redraw()
+	squash = squash.move_toward(Vector2.ONE, 4.0 * delta)
 	if Rewind.is_rewinding or dead:
 		return
 	_tick_timers(delta)
@@ -107,16 +111,27 @@ func _physics_process(delta: float) -> void:
 			velocity.y = JUMP_VELOCITY
 			buffer_t = 0.0
 			coyote_t = 0.0
+			squash = Vector2(0.75, 1.3)
+			Fx.dust(_feet())
+			Sfx.play("jump")
 		if Input.is_action_just_released("jump") and velocity.y < 0.0:
 			velocity.y *= JUMP_CUT
 		if Input.is_action_just_pressed("dash") and dash_cd <= 0.0 and (is_on_floor() or not air_dash_used):
 			dash_t = DASH_TIME
 			dash_cd = DASH_COOLDOWN
 			air_dash_used = not is_on_floor()
+			squash = Vector2(1.35, 0.8)
+			Fx.burst(position, COLOR_VISOR, 8, 90.0, 30.0, Vector2(-facing, 0))
+			Sfx.play("dash")
 		if Input.is_action_just_pressed("attack") and attack_cd <= 0.0:
 			_start_attack()
 
+	var fall_speed := velocity.y
 	move_and_slide()
+	if is_on_floor() and not _was_on_floor and fall_speed > 150.0:
+		squash = Vector2(1.3, 0.75)
+		Fx.dust(_feet(), 8)
+	_was_on_floor = is_on_floor()
 	if attack_t > 0.0:
 		_resolve_attack()
 	_check_damage()
@@ -143,6 +158,7 @@ func _start_attack() -> void:
 		attack_dir = Vector2.DOWN
 	else:
 		attack_dir = Vector2(facing, 0)
+	Sfx.play("slash")
 
 
 func _resolve_attack() -> void:
@@ -152,6 +168,8 @@ func _resolve_attack() -> void:
 			continue
 		if enemy.take_hit("p%d" % attack_id, attack_dir):
 			Rewind.add_time(MS_PER_HIT)
+			Fx.hit_stop(0.045)
+			Fx.shake(2.0)
 			if attack_dir == Vector2.DOWN:
 				velocity.y = POGO_VELOCITY
 				air_dash_used = false
@@ -181,9 +199,19 @@ func _take_damage(source: Vector2) -> void:
 	if away == 0.0:
 		away = -facing
 	velocity = Vector2(away * KNOCKBACK.x, KNOCKBACK.y)
+	Sfx.play("hurt")
+	Fx.hit_stop(0.12)
+	Fx.shake(6.0)
+	Fx.burst(position, COLOR_BODY, 14, 160.0)
 	if hp <= 0:
 		dead = true
 		velocity = Vector2.ZERO
+		Fx.shake(10.0)
+		Fx.burst(position, COLOR_BODY, 30, 220.0)
+
+
+func _feet() -> Vector2:
+	return position + Vector2(0, SIZE.y / 2)
 
 
 func _draw() -> void:
@@ -192,7 +220,10 @@ func _draw() -> void:
 		body = Color(0.35, 0.35, 0.4)
 	elif invuln_t > 0.0 and int(invuln_t * 20.0) % 2 == 0:
 		body = Color.WHITE
+	# Scale around the feet so squashing doesn't lift the body off the floor.
+	draw_set_transform(Vector2(0, SIZE.y / 2 * (1.0 - squash.y)), 0.0, squash)
 	draw_body(self, facing, body, COLOR_VISOR)
+	draw_set_transform(Vector2.ZERO)
 	if attack_t > 0.0:
 		draw_slash(self, position, attack_dir, COLOR_VISOR)
 
