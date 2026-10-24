@@ -7,7 +7,8 @@ extends Node
 ## Plans: fight, arena (waves, rewind undo, gates), boss, win, retrace,
 ## inverted (only the ghost can hurt inverted enemies), boss2 (enraged boss
 ## flipping between normal and inverted; use with --checkpoint=1), reversal
-## (burst the boss until it rewinds itself; --checkpoint=1).
+## (burst the boss until it rewinds itself; --checkpoint=1), spikes (spike
+## costs 1 HP and warps you back to safe ground; fatal spike = real death).
 
 const PLANS := {
 	"fight": [
@@ -97,6 +98,14 @@ func _make_plan(plan_name: String) -> Array:
 				[700, "burst_boss", 4], [720, "ghost_hit_boss", ""], [800, "quit", ""]]
 			for f in range(480, 800, 10):
 				plan.append([f, "boss_trace", ""])
+		"spikes":
+			# Walk into the first spike strip twice, then hit it at 1 HP.
+			plan = [[1, "warp", 640], [5, "press", "move_right"], [60, "release", "move_right"],
+				[61, "shot", "1_respawned"], [70, "press", "move_right"], [130, "release", "move_right"],
+				[131, "set_hp", 1], [140, "press", "move_right"], [200, "release", "move_right"],
+				[201, "shot", "2_dead"], [210, "quit", ""]]
+			for f in [4, 20, 30, 45, 60, 130, 200]:
+				plan.append([f, "trace", ""])
 		"win":
 			plan = [[1, "god", ""], [5, "press", "move_right"], [260, "kill_boss", ""],
 				[300, "shot", "1_portal_open"], [600, "shot", "2_won"], [620, "quit", ""]]
@@ -129,8 +138,10 @@ func _physics_process(_delta: float) -> void:
 				var inverted := get_tree().get_nodes_in_group("enemies").filter(func(e: Enemy) -> bool:
 					return e.inverted and not e.dormant).map(func(e: Enemy) -> String:
 					return "%d@%d" % [e.hp, int(e.position.x)])
-				print("[trace] frame=%d rewinding=%s pos=(%.1f,%.1f) facing=%d attack_t=%.2f inverted=%s" % [
-					_frame, Rewind.is_rewinding, p.position.x, p.position.y, p.facing, p.attack_t, inverted])
+				print("[trace] frame=%d rewinding=%s pos=(%.1f,%.1f) hp=%d dead=%s facing=%d attack_t=%.2f inverted=%s" % [
+					_frame, Rewind.is_rewinding, p.position.x, p.position.y, p.hp, p.dead, p.facing, p.attack_t, inverted])
+			"set_hp":
+				get_tree().get_first_node_in_group("player").hp = step[2]
 			"warp":
 				get_tree().get_first_node_in_group("player").position.x = step[2]
 			"face_boss":

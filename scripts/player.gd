@@ -1,7 +1,8 @@
 class_name Player
 extends CharacterBody2D
 ## Hollow Knight-style controller: run, variable jump, dash, directional slash
-## and pogo off enemies with a down-slash. Drawn as placeholder shapes until
+## and pogo off enemies with a down-slash. Spikes cost 1 HP and put you back
+## on the last safe ground you stood on. Drawn as placeholder shapes until
 ## sprites land in assets/art.
 
 const SIZE := Vector2(12, 24)
@@ -23,6 +24,10 @@ const INVULN_TIME := 0.8
 const HURT_TIME := 0.25
 const KNOCKBACK := Vector2(180, -200)
 const MS_PER_HIT := 400.0
+## Spike hit: fade out, warp to safe ground halfway through, fade back in.
+const SPIKE_RESPAWN_TIME := 0.5
+## Floor this close to a hazard doesn't count as safe ground.
+const SAFE_MARGIN := 10.0
 
 const COLOR_BODY := Color("#ff2a6d")
 const COLOR_VISOR := Color("#05d9e8")
@@ -44,6 +49,9 @@ var hurt_t := 0.0
 ## Cosmetic squash and stretch, eases back to 1.
 var squash := Vector2.ONE
 var _was_on_floor := true
+## Last floor spot clear of hazards; spikes send you back here.
+var safe_pos := Vector2.ZERO
+var respawn_t := 0.0
 
 ## Damage rects in world space, set by the level.
 var hazards: Array[Rect2] = []
@@ -82,6 +90,7 @@ func _ready() -> void:
 	shape.shape = RectangleShape2D.new()
 	shape.shape.size = SIZE
 	add_child(shape)
+	safe_pos = position
 
 
 func _physics_process(delta: float) -> void:
@@ -90,6 +99,9 @@ func _physics_process(delta: float) -> void:
 	if Rewind.is_rewinding or dead:
 		return
 	_tick_timers(delta)
+	if respawn_t > 0.0:
+		_tick_respawn(delta)
+		return
 
 	if is_on_floor():
 		coyote_t = COYOTE_TIME
@@ -132,6 +144,8 @@ func _physics_process(delta: float) -> void:
 		squash = Vector2(1.3, 0.75)
 		Fx.dust(_feet(), 8)
 	_was_on_floor = is_on_floor()
+	if is_on_floor() and hurt_t <= 0.0 and _on_safe_ground():
+		safe_pos = position
 	if attack_t > 0.0:
 		_resolve_attack()
 	_check_damage()
@@ -176,13 +190,14 @@ func _resolve_attack() -> void:
 
 
 func _check_damage() -> void:
-	if invuln_t > 0.0:
-		return
 	var body := Rect2(position - SIZE / 2, SIZE)
+	# Spikes ignore i-frames, so you can't walk across them after a hit.
 	for rect in hazards:
 		if body.intersects(rect):
-			_take_damage(rect.get_center())
+			_spike_hit()
 			return
+	if invuln_t > 0.0:
+		return
 	for enemy: Enemy in get_tree().get_nodes_in_group("enemies"):
 		for rect in enemy.damage_rects():
 			if body.intersects(rect):
@@ -204,10 +219,48 @@ func _take_damage(source: Vector2) -> void:
 	Fx.shake(6.0)
 	Fx.burst(position, COLOR_BODY, 14, 160.0)
 	if hp <= 0:
-		dead = true
-		velocity = Vector2.ZERO
-		Fx.shake(10.0)
-		Fx.burst(position, COLOR_BODY, 30, 220.0)
+		_die()
+
+
+func _spike_hit() -> void:
+	hp -= 1
+	Sfx.play("hurt")
+	Fx.hit_stop(0.12)
+	Fx.shake(6.0)
+	Fx.burst(position, COLOR_BODY, 14, 160.0)
+	if hp <= 0:
+		_die()
+		return
+	respawn_t = SPIKE_RESPAWN_TIME
+	invuln_t = SPIKE_RESPAWN_TIME + INVULN_TIME
+	dash_t = 0.0
+	attack_t = 0.0
+	velocity = Vector2.ZERO
+
+
+func _tick_respawn(delta: float) -> void:
+	var half := SPIKE_RESPAWN_TIME / 2.0
+	var before := respawn_t
+	respawn_t = maxf(respawn_t - delta, 0.0)
+	if before > half and respawn_t <= half:
+		position = safe_pos
+		Fx.burst(position, COLOR_VISOR, 12, 100.0)
+	velocity = Vector2.ZERO
+
+
+func _on_safe_ground() -> bool:
+	var feet := Rect2(position - SIZE / 2, SIZE).grow_individual(SAFE_MARGIN, 0.0, SAFE_MARGIN, 4.0)
+	for rect in hazards:
+		if feet.intersects(rect):
+			return false
+	return true
+
+
+func _die() -> void:
+	dead = true
+	velocity = Vector2.ZERO
+	Fx.shake(10.0)
+	Fx.burst(position, COLOR_BODY, 30, 220.0)
 
 
 func _feet() -> Vector2:
@@ -216,7 +269,11 @@ func _feet() -> Vector2:
 
 func _draw() -> void:
 	var body := COLOR_BODY
-	if dead:
+	if respawn_t > 0.0:
+		# Fade out at the spikes, fade back in on safe ground.
+		var half := SPIKE_RESPAWN_TIME / 2.0
+		body = Color(COLOR_BODY, absf(respawn_t - half) / half)
+	elif dead:
 		body = Color(0.35, 0.35, 0.4)
 	elif invuln_t > 0.0 and int(invuln_t * 20.0) % 2 == 0:
 		body = Color.WHITE
@@ -234,6 +291,7 @@ func capture_state() -> Dictionary:
 		"dash_t": dash_t, "dash_cd": dash_cd, "air_dash_used": air_dash_used,
 		"attack_t": attack_t, "attack_cd": attack_cd, "attack_dir": attack_dir, "attack_id": attack_id,
 		"invuln_t": invuln_t, "hurt_t": hurt_t, "coyote_t": coyote_t,
+		"safe_pos": safe_pos, "respawn_t": respawn_t,
 	}
 
 
