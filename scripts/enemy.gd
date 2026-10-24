@@ -94,8 +94,12 @@ func take_hit(key: String, from_dir: Vector2) -> bool:
 	hurt_t = HURT_TIME
 	if from_dir.x != 0.0:
 		velocity.x = from_dir.x * knockback
+	Sfx.play("hit")
+	Fx.burst(position, Color.WHITE, 8, 140.0, 50.0, Vector2(from_dir.x, -0.5).normalized() if from_dir.x != 0.0 else from_dir)
 	if hp <= 0:
 		dead = true
+		Fx.shake(3.0)
+		Fx.burst(position, COLOR_BODY, 20, 180.0)
 	return true
 
 
